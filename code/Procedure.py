@@ -18,7 +18,8 @@ from tqdm import tqdm
 import model
 import multiprocessing
 from sklearn.metrics import roc_auc_score
-
+import collections
+import numba as nb
 
 CORES = multiprocessing.cpu_count() // 2
 
@@ -29,17 +30,18 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     bpr: utils.BPRLoss = loss_class
     
     with timer(name="Sample"):
+        # 采样副样本
         S = utils.UniformSample_original(dataset)
     users = torch.Tensor(S[:, 0]).long()
     posItems = torch.Tensor(S[:, 1]).long()
     negItems = torch.Tensor(S[:, 2]).long()
-
     users = users.to(world.device)
     posItems = posItems.to(world.device)
     negItems = negItems.to(world.device)
     users, posItems, negItems = utils.shuffle(users, posItems, negItems)
     total_batch = len(users) // world.config['bpr_batch_size'] + 1
     aver_loss = 0.
+    total_similarity = 0.
     for (batch_i,
          (batch_users,
           batch_pos,
@@ -47,16 +49,46 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
                                                    posItems,
                                                    negItems,
                                                    batch_size=world.config['bpr_batch_size'])):
-        cri = bpr.stageOne(batch_users, batch_pos, batch_neg)
+        # 增加每个用户的正样本
+        unique_user, pos_item_index, mask = load_users_pos_items(dataset, batch_users)
+        # start_time = time()
+        cri, similarity = bpr.stageOne(batch_users, batch_pos, batch_neg, unique_user, pos_item_index, mask)
+        # end_time = time()
+        # print('计算时间', end_time - start_time)
+
         aver_loss += cri
+        total_similarity += similarity
         if world.tensorboard:
             w.add_scalar(f'BPRLoss/BPR', cri, epoch * int(len(users) / world.config['bpr_batch_size']) + batch_i)
     aver_loss = aver_loss / total_batch
+    aver_similarity = total_similarity / total_batch
     time_info = timer.dict()
     timer.zero()
-    return f"loss{aver_loss:.3f}-{time_info}"
-    
-    
+    return f"loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}"
+
+
+def load_users_pos_items(dataset, batch_users):
+    batch_users = batch_users.detach().cpu().numpy()
+    unique_user = list(set(batch_users))
+    all_pos_list = np.array(dataset.allPos, dtype=object)
+    users_all_pos_items = all_pos_list[unique_user]
+    lens = [len(item) for item in users_all_pos_items]
+    max_pos_len = max(lens)
+    pos_item_index, mask = normal_users_pos_list(users_all_pos_items, max_pos_len)
+    return unique_user, pos_item_index, mask
+
+
+@nb.jit(forceobj=True)
+def normal_users_pos_list(users_all_pos_items, max_len):
+    mask = np.zeros((len(users_all_pos_items), max_len))
+    pos_item_index = np.zeros((len(users_all_pos_items), max_len))
+    for index, item in enumerate(users_all_pos_items):
+        user_pos_num = len(item)
+        pos_item_index[index] = np.concatenate((item, np.zeros(max_len-user_pos_num)))
+        mask[index] = np.concatenate((np.ones(user_pos_num), np.zeros(max_len-user_pos_num)))
+    return pos_item_index, mask
+
+
 def test_one_batch(X):
     sorted_items = X[0].numpy()
     groundTrue = X[1]
@@ -149,5 +181,5 @@ def Test(dataset, Recmodel, epoch, w=None, multicore=0):
                           {str(world.topks[i]): results['ndcg'][i] for i in range(len(world.topks))}, epoch)
         if multicore == 1:
             pool.close()
-        print(results)
+        # print(results)
         return results

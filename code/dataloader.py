@@ -285,6 +285,7 @@ class Loader(BasicDataset):
         self.items_D = np.array(self.UserItemNet.sum(axis=0)).squeeze()
         self.items_D[self.items_D == 0.] = 1.
         # pre-calculate
+        # 获取所有的正向节点
         self._allPos = self.getUserPosItems(list(range(self.n_user)))
         self.__testDict = self.__build_test()
         print(f"{world.dataset} is ready to go")
@@ -363,6 +364,7 @@ class Loader(BasicDataset):
                 self.Graph = self._split_A_hat(norm_adj)
                 print("done split matrix")
             else:
+                # 将稀疏矩阵转为 成对tensor
                 self.Graph = self._convert_sp_mat_to_sp_tensor(norm_adj)
                 self.Graph = self.Graph.coalesce().to(world.device)
                 print("don't split the matrix")

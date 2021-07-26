@@ -43,4 +43,8 @@ def parse_args():
     parser.add_argument('--pretrain', type=int, default=0, help='whether we use pretrained weight or not')
     parser.add_argument('--seed', type=int, default=2020, help='random seed')
     parser.add_argument('--model', type=str, default='lgn', help='rec-model, support [mf, lgn]')
+    parser.add_argument('--replace_ratio', type=float, default=0.2,
+                        help='set the ratio of needing to replace private item')
+    parser.add_argument('--similarity_ratio', type=float, default=0.6,
+                        help='the similarity of original and replaceable items')
     return parser.parse_args()

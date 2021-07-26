@@ -16,6 +16,7 @@ from model import LightGCN
 from model import PairWiseModel
 from sklearn.metrics import roc_auc_score
 import random
+import numba as nb
 import os
 try:
     from cppimport import imp_from_filepath
@@ -38,16 +39,56 @@ class BPRLoss:
         self.lr = config['lr']
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
 
-    def stageOne(self, users, pos, neg):
-        loss, reg_loss = self.model.bpr_loss(users, pos, neg)
+    def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
+        # start_time = time()
+        loss, reg_loss, similarity_loss, similarity = self.model.bpr_loss(
+            users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
-        loss = loss + reg_loss
+        # print(loss, reg_loss, similarity_loss)
+        loss = loss + reg_loss + similarity_loss
+        # end_time = time()
+        # print('计算时间', end_time - start_time)
 
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
 
-        return loss.cpu().item()
+        return loss.cpu().item(), similarity
+
+@nb.jit(nopython=True)
+def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_items):
+    for array_index, user_item in enumerate(need_replace):
+        user_index = user_item[0]
+        item_index = user_item[1]
+        user_index_array = np.nonzero(np.asfarray(users == user_index))[0]
+        item_index_array = np.nonzero(np.asfarray(pos_items == item_index))[0]
+        if len(item_index_array) > 0:
+            intersect = np.intersect1d(user_index_array, item_index_array)
+            for index in intersect:
+                pos_items[index] = replaceable_items[array_index]
+    return pos_items
+
+@nb.jit(nopython=True)
+def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index, pos_item_index, replace_ratio, train_pos):
+    # 开始循环构建数组
+    need_replace = []
+    for user_id, item_score in enumerate(sorted_pos_score):
+        user_index = users[user_id]
+        # 获取当前用户的所有评分大于-1e-8的元素
+        item_score = item_score.astype(np.float64)
+        user_item_sorted_index = sorted_pos_index[user_id][item_score > -100]
+        # 根据索引取出所有有效的item的得分排名
+        valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]
+        # 根据阈值计算 要替换的item的索引位置
+        need_replace_item_start = len(valid_pos_item_list) - round(len(valid_pos_item_list) * replace_ratio)
+        need_replace_items = valid_pos_item_list[need_replace_item_start:]
+        # print(len(valid_pos_item_list), len(need_replace_items))
+        # print(len(valid_pos_item_list) , len(need_replace_items), len(need_replace_items)/len(valid_pos_item_list) )
+        for item_id in need_replace_items:
+            if item_id in train_pos:
+                need_replace.append([user_index, item_id])
+        # need_replace.extend([[user_index, item_id] for item_id in need_replace_items])
+    return need_replace
 
 
 def UniformSample_original(dataset, neg_ratio = 1):
@@ -70,6 +111,7 @@ def UniformSample_original_python(dataset):
     total_start = time()
     dataset : BasicDataset
     user_num = dataset.trainDataSize
+    # 根据用户 生成一个随机数
     users = np.random.randint(0, dataset.n_users, user_num)
     allPos = dataset.allPos
     S = []
