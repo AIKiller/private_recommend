@@ -75,7 +75,7 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index, 
     for user_id, item_score in enumerate(sorted_pos_score):
         user_index = users[user_id]
         # 获取当前用户的所有评分大于-1e-8的元素
-        item_score = item_score.astype(np.float64)
+        item_score = item_score.astype(np.float32)
         user_item_sorted_index = sorted_pos_index[user_id][item_score > -100]
         # 根据索引取出所有有效的item的得分排名
         valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]

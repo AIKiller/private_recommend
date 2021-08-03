@@ -206,79 +206,34 @@ class LightGCN(BasicModel):
         neg_emb_ego = self.embedding_item(neg_items)
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
 
+    # 计算每个正样本和用户的得分
+    # 唯一用户标识
+    # 每个用户的pos items
+    # 每个用户pos items的mask
+    # 当前批次要训练的item数据
+    def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
+        all_users, all_items = self.computer()
 
-    # ################ 使用margin 计算loss方法 ###########
-    #
-    # def calculate_similar_loss(self, all_items, original_items, sorted_items):
-    #     labels = torch.empty((len(original_items))).cuda()
-    #     labels[:] = self.similarity_ratio
-    #     original_item_features = all_items[original_items]
-    #     sorted_item_feature = all_items[sorted_items]
-    #
-    #     # 得分最高的item作为替换的节点
-    #     replaceable_item_feature = sorted_item_feature[:, 1, :]
-    #     other_item_feature = sorted_item_feature[:, 1:, :]
-    #
-    #     # loss = max((similarity_ratio + d(user, replaceable_item) - d(user, other_item)),0)
-    #
-    #     # 计算原始向量 和  可替换向量之间的 相似度 作为第一个距离
-    #     replaceable_similarity = self.CosineSimilarity(original_item_features, replaceable_item_feature)
-    #     # 计算第二个距离
-    #     original_item_features = original_item_features.unsqueeze(1)
-    #
-    #     other_similarity = self.OtherCosineSimilarity(original_item_features, other_item_feature)
-    #
-    #     other_similarity = other_similarity.mean()
-    #
-    #     similarity_loss = self.similarity_ratio + replaceable_similarity - other_similarity
-    #
-    #     similarity_loss = torch.clamp(similarity_loss, max=0)
-    #
-    #     similarity_loss = similarity_loss.mean()
-    #
-    #     # print(similarity_loss)
-    #     # # 计算每个向量的相似度和相似度阈值的loss
-    #     # # todo:是不是均方差更有效果
-    #     # similarity_loss = self.similarity_loss(similarity, labels)
-    #     return similarity_loss, replaceable_similarity.mean()
-    #
-    # # 根据用户和item对形成新的特征X 并使用这个特征 给每个要替换的item 选择可以替换的item
-    # def choose_replaceable_item(self, user_item_id, item_feature, all_items):
-    #     user_item_id = np.array(user_item_id)
-    #     # 根据<user, item>特征对 生成新的特征Z  needReplaceNodes * latent_dim
-    #     user_item_feature = self.user_item_feature(item_feature)
-    #     # 计算每个需要替换的item 和 所有item的得分
-    #     replace_score = torch.mm(user_item_feature, all_items.T)
-    #     # 取每个节点下面得分最高的10个节点
-    #     top_score_items = torch.topk(replace_score, 10, dim=1)
-    #     replaceable_items = top_score_items[1]
-    #     original_items = user_item_id[:, 1]
-    #     similarity_loss, similarity = self.calculate_similar_loss(all_items, original_items, replaceable_items)
-    #     return replaceable_items[:, 1], similarity_loss, similarity
-    #     # pos_scores = torch.sum(pos_scores, dim=2)
-    #     # print(item_feature.shape)
+        # 获取用户的特征信息
+        users = torch.tensor(list(users)).long()
+        users_emb = all_users[users]
 
+        # 根据阈值获取每个用户需要替换的items
+        user_list = users.detach().cpu().numpy()
+        need_replace = []
+        for index, user_id in enumerate(user_list):
+            pos_items = pos_item_index[index]
+            items_mask = (pos_item_mask[index] == 1)
+            items = pos_items[items_mask].astype(np.int64)
 
-    # 根据的采样率获取分数较低的节点
-    def sample_low_score_pos_item(self, users, sorted_pos, pos_item_index, all_users, all_items, train_pos):
-        # start_time = time()
-        users = users.detach().cpu().numpy()
-        sorted_pos_score = sorted_pos[0].detach().cpu().numpy()
-        sorted_pos_index = sorted_pos[1].detach().cpu().numpy()
-        pos_item_index = pos_item_index.long().detach().cpu().numpy()
-        train_pos = train_pos.long().detach().cpu().numpy()
-        # 开始构建每个用户需要替换的item
-        need_replace = utils.construct_need_replace_user_item(
-            users, sorted_pos_score, sorted_pos_index,
-            pos_item_index, self.replace_ratio,
-            train_pos
-        )
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
+            need_replace_item_start = len(items) - round(len(items) * self.replace_ratio)
+            need_replace_items = items[need_replace_item_start:]
+            # 循环 压入数据
+            for item_id in need_replace_items:
+                if item_id in train_pos:
+                    need_replace.append([user_id, item_id])
 
-        del sorted_pos_score
-        del sorted_pos_index
-        del pos_item_index
+        # 准备需要替换的信息
         need_replace = np.array(need_replace)
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
@@ -295,37 +250,6 @@ class LightGCN(BasicModel):
         # 获取每个需要替换的item 对应的相似item
         replaceable_items, similarity_loss, similarity = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
-
-        return need_replace, replaceable_items, similarity_loss, similarity
-
-    # 计算每个正样本和用户的得分
-    def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
-        # start_time = time()
-        all_users, all_items = self.computer()
-        users = torch.tensor(list(users)).long()
-        pos_item_index = torch.from_numpy(pos_item_index).cuda()
-        # 把所有占位的元素的分数设置为一个很小的得分
-        # pos_item_mask[pos_item_mask == 0] = -100
-        # pos_item_mask = torch.from_numpy(pos_item_mask).cuda()
-        max_len = pos_item_index.size(1)
-        batch_size = pos_item_index.size(0)
-        users_emb = all_users[users]
-        users_emb = users_emb.view(batch_size, 1, self.latent_dim)
-        users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
-        pos_emb = all_items[pos_item_index.long()]
-        # 计算每个用户和自己pos item 之间的得分
-        pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = torch.sum(pos_scores, dim=2)
-        # 遮挡其余的占位数据
-        pos_scores[pos_item_mask == 0] = -100
-        # 针对评分结果进行排序
-        sorted_pos_cores = torch.sort(pos_scores, dim=1, descending=True)
-        #
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
-        # 采样所有用户的评分较低的pos item用于替换
-        need_replace, replaceable_items, similarity_loss, similarity = \
-            self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
         return need_replace, replaceable_items, similarity_loss, similarity
 
