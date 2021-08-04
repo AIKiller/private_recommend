@@ -213,13 +213,8 @@ class LightGCN(BasicModel):
     # 当前批次要训练的item数据
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
         all_users, all_items = self.computer()
-
-        # 获取用户的特征信息
-        users = torch.tensor(list(users)).long()
-        users_emb = all_users[users]
-
         # 根据阈值获取每个用户需要替换的items
-        user_list = users.detach().cpu().numpy()
+        user_list = users
         need_replace = []
         for index, user_id in enumerate(user_list):
             pos_items = pos_item_index[index]
