@@ -214,19 +214,10 @@ class LightGCN(BasicModel):
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
         all_users, all_items = self.computer()
         # 根据阈值获取每个用户需要替换的items
-        user_list = users
-        need_replace = []
-        for index, user_id in enumerate(user_list):
-            pos_items = pos_item_index[index]
-            items_mask = (pos_item_mask[index] == 1)
-            items = pos_items[items_mask].astype(np.int64)
-
-            need_replace_item_start = len(items) - round(len(items) * self.replace_ratio)
-            need_replace_items = items[need_replace_item_start:]
-            # 循环 压入数据
-            for item_id in need_replace_items:
-                if item_id in train_pos:
-                    need_replace.append([user_id, item_id])
+        user_list = np.array(users, dtype=np.int32)
+        train_pos = train_pos.detach().cpu().numpy()
+        need_replace = utils.construct_need_replace_user_item(user_list, pos_item_mask,
+                                                              pos_item_index, self.replace_ratio, train_pos)
 
         # 准备需要替换的信息
         need_replace = np.array(need_replace)
