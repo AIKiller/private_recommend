@@ -22,7 +22,6 @@ import collections
 import numba as nb
 
 CORES = multiprocessing.cpu_count() // 2
-USER_POS_ITEMS = dict()
 
 
 def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=None):
@@ -56,6 +55,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
         cri, similarity = bpr.stageOne(batch_users, batch_pos, batch_neg, unique_user, pos_item_index, mask)
         # end_time = time()
         # print('计算时间', end_time - start_time)
+
         aver_loss += cri
         total_similarity += similarity
         if world.tensorboard:
@@ -70,7 +70,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
 def load_users_pos_items(dataset, batch_users):
     batch_users = batch_users.detach().cpu().numpy()
     unique_user = list(set(batch_users))
-    all_pos_list = np.array(dataset.disorderAllPos, dtype=object)
+    all_pos_list = np.array(dataset.allPos, dtype=object)
     users_all_pos_items = all_pos_list[unique_user]
     lens = [len(item) for item in users_all_pos_items]
     max_pos_len = max(lens)
@@ -80,7 +80,7 @@ def load_users_pos_items(dataset, batch_users):
 
 @nb.jit(forceobj=True)
 def normal_users_pos_list(users_all_pos_items, max_len):
-    mask = np.zeros((len(users_all_pos_items), max_len))
+    mask = np.zeros((len(users_all_pos_items), max_len), dtype=np.int32)
     pos_item_index = np.zeros((len(users_all_pos_items), max_len))
     for index, item in enumerate(users_all_pos_items):
         user_pos_num = len(item)
