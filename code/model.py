@@ -131,6 +131,9 @@ class LightGCN(BasicModel):
             # random normal init seems to be a better choice when lightGCN actually don't use any non-linear activation function
             nn.init.normal_(self.embedding_user.weight, std=0.1)
             nn.init.normal_(self.embedding_item.weight, std=0.1)
+            nn.init.normal_(self.select_layer[0].weight, std=0.1)
+            nn.init.normal_(self.select_layer[1].weight, std=0.1)
+            nn.init.normal_(self.select_layer[2].weight, std=0.1)
             world.cprint('use NORMAL distribution initilizer')
         else:
             self.embedding_user.weight.data.copy_(torch.from_numpy(self.config['user_emb']))
@@ -214,22 +217,22 @@ class LightGCN(BasicModel):
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
 
     # 根据的采样率获取分数较低的节点
-    def sample_low_score_pos_item(self, users, sorted_item_score, pos_item_index, all_users, all_items, train_pos):
+    def sample_low_score_pos_item(self, users, sorted_item_score, pos_item_index,
+                                  all_users, all_items, train_pos, max_len):
         users = users.detach().cpu().numpy()
         sorted_pos_score = sorted_item_score[0].detach().cpu().numpy()
         sorted_pos_index = sorted_item_score[1].detach().cpu().numpy()
         pos_item_index = pos_item_index.long().detach().cpu().numpy()
         train_pos = train_pos.long().detach().cpu().numpy()
-        temp_items_feature = all_items.detach().cpu().numpy()
+
         # 循环获取每个用户下被选中的item数据
-        need_replace, user_replace_number, user_replace_feature = utils.construct_need_replace_user_item(
+        need_replace, user_score_index = utils.construct_need_replace_user_item(
             users, sorted_pos_score, sorted_pos_index,
             pos_item_index, self.replace_ratio,
-            train_pos, temp_items_feature
+            train_pos, max_len
         )
-
         need_replace = np.array(need_replace)
-
+        user_score_index = np.array(user_score_index)
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
         items_index = need_replace[:, 1]
@@ -248,11 +251,10 @@ class LightGCN(BasicModel):
         replaceable_items, similarity_loss, similarity = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
 
-        return need_replace, replaceable_items, similarity_loss, similarity, user_replace_number, user_replace_feature
+        return need_replace, replaceable_items, similarity_loss, similarity, user_score_index
 
     # 计算每个正样本和用户的得分
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
-        # start_time = time()
         all_users, all_items = self.computer()
         users = torch.tensor(list(users)).long()
         pos_item_index = torch.from_numpy(pos_item_index).cuda()
@@ -261,9 +263,9 @@ class LightGCN(BasicModel):
         batch_size = pos_item_index.size(0)
         # 获取用户的所有pos item的特征信息
         # batch_size  * max_len * dim
-        pos_emb = all_items[pos_item_index.long()]
+        pos_emb = all_items[pos_item_index.long()].detach()
         # 获取所有用的特信息
-        users_emb = all_users[users]
+        users_emb = all_users[users].detach()
         users_emb = users_emb.view(batch_size, 1, self.latent_dim)
         users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
         user_pos_item_feature = torch.cat([users_emb, pos_emb], dim=-1)
@@ -271,43 +273,53 @@ class LightGCN(BasicModel):
         user_item_scores = self.select_layer(user_pos_item_feature)
         # 整理矩阵格式 进行softmax
         user_item_scores = user_item_scores.reshape(batch_size, max_len)
-        user_item_scores = user_item_scores.masked_fill(mask=(pos_item_mask == 0), value=-1e9)
-        # 获取到每个pos item 选出来的几率
-        user_item_select_prob = F.softmax(user_item_scores, dim=-1)
-        sorted_pos_cores = torch.sort(user_item_select_prob, dim=1, descending=True)
+        # 获取到每个pos item 选出来的概率，并遮挡
+        user_item_select_prob = F.tanh(user_item_scores)
+        user_item_scores = user_item_select_prob.masked_fill(mask=(pos_item_mask == 0), value=2)
+        sorted_pos_cores = torch.sort(user_item_scores, dim=1, descending=True)
 
-        del user_item_scores
-        del user_item_select_prob
-
-        # print(sorted_pos_cores)
         # 根据概率挑选item去替换
-        need_replace, replaceable_items, similarity_loss, similarity, user_replace_number, user_replace_feature = \
-            self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
-
+        need_replace, replaceable_items, similarity_loss, similarity, user_score_index = \
+            self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index,
+                                           all_users, all_items, train_pos, max_len)
         # 开始计算原始user的item的方差数据
-        user_valid_item_number = pos_item_mask.sum(dim=-1).reshape(batch_size, 1)
         # batch_size * max_len * 64
         pos_emb = pos_emb * pos_item_mask.reshape(batch_size, max_len, 1)
         # 每个用户下所有item的特征加和 batch_size * 64
         user_item_sum_feature = pos_emb.sum(dim=1)
-        user_original_item_stds = (user_item_sum_feature / user_valid_item_number).std(dim=-1)
+        user_original_item_stds = user_item_sum_feature.std(dim=-1)
 
-        # 计算抽取出去item以后用户的方差
-        user_replace_number = torch.Tensor(user_replace_number).cuda()
-        user_replace_feature = torch.Tensor(user_replace_feature).cuda()
+        # 开始计算去除选择的item之后用户下所有item的方差
+        user_score_index = torch.Tensor(user_score_index).cuda()
+        # 根据计算的mask 进行数据填充
+        user_item_select_prob = user_item_select_prob.masked_fill(mask=(user_score_index == 0), value=1)
+        user_item_select_prob = (1 - user_item_select_prob) / 2
+        # 遮挡已经被选择了的item相应的特征
+        not_select_pos_emb = pos_emb * user_item_select_prob.reshape(batch_size, max_len, 1)
+        user_item_sum_feature = not_select_pos_emb.sum(dim=1)
+        user_not_select_item_stds = user_item_sum_feature.std(dim=-1)
 
-        user_replace_number = user_replace_number.reshape(batch_size, 1)
-        user_selected_item_stds = ((user_item_sum_feature - user_replace_feature)
-                                   / (user_valid_item_number - user_replace_number)).std(dim=-1)
+        std_ratio = torch.abs(user_original_item_stds - user_not_select_item_stds) / user_original_item_stds
 
-        del user_item_sum_feature
-        del user_replace_feature
+        labels = torch.empty((len(user_original_item_stds))).cuda()
+        labels[:] = 1
 
-        std_loss = self.std_l1_loss(user_selected_item_stds, user_original_item_stds)
-
-        # std_loss = 0.
+        std_loss = torch.clamp(std_ratio - labels, min=0).mean()
 
         return need_replace, replaceable_items, similarity_loss, similarity, std_loss
+
+
+    def get_fn_next_functions(self, loss_fn):
+        print(loss_fn)
+        if loss_fn is None:
+            print('gradient is finished')
+            return None
+        else:
+            if len(loss_fn.next_functions) > 0:
+                for i in range(len(loss_fn.next_functions)):
+                    self.get_fn_next_functions(loss_fn.next_functions[i][0])
+
+
 
     def replace_pos_items(self, users, pos_items, need_replace, replaceable_items):
         users = users.detach().cpu().numpy()
@@ -322,10 +334,16 @@ class LightGCN(BasicModel):
         # 得分最低的样本需要被替换
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
+        original_pos = pos
         need_replace, replaceable_items, similarity_loss, similarity, std_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
+        # print(need_replace.shape)
         # 替换所有要替换的节点
         pos = self.replace_pos_items(users, pos, need_replace, replaceable_items)
+
+        # print((original_pos.eq(pos)).int().sum(), len(original_pos))
+        # exit()
+
         # center_time = time()
         # print('计算替换节点的时间', center_time - start_time)
 

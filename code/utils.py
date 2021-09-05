@@ -40,16 +40,11 @@ class BPRLoss:
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
-        # start_time = time()
+
         loss, reg_loss, similarity_loss, similarity, std_loss = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
-        # print(loss, reg_loss, similarity_loss)
         loss = loss + reg_loss + similarity_loss + std_loss
-        # print('std_loss', loss, reg_loss, similarity_loss, std_loss)
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
-
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
@@ -72,27 +67,37 @@ def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_
 
 @nb.jit(nopython=True)
 def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
-                                     pos_item_index, replace_ratio, train_pos, temp_items_feature):
+                                     pos_item_index, replace_ratio, train_pos, max_len):
     need_replace = []
-    user_replace_number = []
-    user_replace_feature = []
+    user_score_index = []
+
     for user_id, item_score in enumerate(sorted_pos_score):
         user_index = users[user_id]
-        # 获取当前用户的所有选取概率大于0的元素
-        user_item_sorted_index = sorted_pos_index[user_id][item_score > 0]
+        # 预设一个0元素的向量
+        item_selected_index = np.zeros(max_len)
+        # 在小于等1的元素里面 挑选x%的元素用于替换
+        user_item_sorted_index = sorted_pos_index[user_id][item_score <= 1]
+        item_selected_index[user_item_sorted_index] = 1
         # 根据索引取出所有有效的item的得分排名
         valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]
         # 根据阈值计算 要替换的item的索引位置
         need_replace_item_end = round(len(valid_pos_item_list) * replace_ratio)
         need_replace_items = valid_pos_item_list[:need_replace_item_end]
-        user_replace_number.append(len(need_replace_items))
-        user_replace_feature.append(np.sum(temp_items_feature[need_replace_items], axis=0))
+        # print(len(need_replace_items))
 
+        item_selected_index[user_item_sorted_index[: need_replace_item_end]] = 0
+        user_score_index.append(item_selected_index)
         for item_id in need_replace_items:
             if item_id in train_pos:
                 need_replace.append([user_index, item_id])
-
-    return need_replace, user_replace_number, user_replace_feature
+    #     print(len(need_replace))
+    #     exit()
+    #
+    #
+    # print(len(train_pos))
+    # print(len(need_replace))
+    # exit()
+    return need_replace, user_score_index
 
 
 def UniformSample_original(dataset, neg_ratio = 1):
