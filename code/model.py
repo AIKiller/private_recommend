@@ -16,6 +16,7 @@ import utils
 from time import time
 import torch.nn.functional as F
 from Similar import RegularSimilar
+from SelfLoss import MarginLoss
 
 
 class BasicModel(nn.Module):
@@ -118,11 +119,11 @@ class LightGCN(BasicModel):
         self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
 
         self.select_layer = nn.Sequential(
-            nn.Linear(2 * self.latent_dim, self.latent_dim),
+            nn.Conv1d(2 * self.latent_dim, self.latent_dim, kernel_size=1),
             nn.BatchNorm1d(self.latent_dim),
-            nn.Linear(self.latent_dim, 1)
+            nn.Conv1d(self.latent_dim, 1, kernel_size=1)
         )
-        self.std_l1_loss = nn.L1Loss()
+        self.std_margin_loss = MarginLoss()
 
         if self.config['pretrain'] == 0:
             #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
@@ -269,8 +270,9 @@ class LightGCN(BasicModel):
         users_emb = users_emb.view(batch_size, 1, self.latent_dim)
         users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
         user_pos_item_feature = torch.cat([users_emb, pos_emb], dim=-1)
-        user_pos_item_feature = user_pos_item_feature.reshape(-1, 2 * self.latent_dim)
+        user_pos_item_feature = user_pos_item_feature.transpose(1, 2).contiguous()
         user_item_scores = self.select_layer(user_pos_item_feature)
+        user_item_scores = user_item_scores.transpose(1, 2).contiguous()
         # 整理矩阵格式 进行softmax
         user_item_scores = user_item_scores.reshape(batch_size, max_len)
         # 获取到每个pos item 选出来的概率，并遮挡
@@ -292,19 +294,21 @@ class LightGCN(BasicModel):
         # 开始计算去除选择的item之后用户下所有item的方差
         user_score_index = torch.Tensor(user_score_index).cuda()
         # 根据计算的mask 进行数据填充
-        user_item_select_prob = user_item_select_prob.masked_fill(mask=(user_score_index == 0), value=1)
+        user_item_select_prob = user_item_select_prob.masked_fill(mask=(user_score_index == 0), value=0)
         user_item_select_prob = (1 - user_item_select_prob) / 2
         # 遮挡已经被选择了的item相应的特征
         not_select_pos_emb = pos_emb * user_item_select_prob.reshape(batch_size, max_len, 1)
         user_item_sum_feature = not_select_pos_emb.sum(dim=1)
         user_not_select_item_stds = user_item_sum_feature.std(dim=-1)
 
+        # std_loss = self.std_l1_loss(user_original_item_stds, user_not_select_item_stds)
+
         std_ratio = torch.abs(user_original_item_stds - user_not_select_item_stds) / user_original_item_stds
 
         labels = torch.empty((len(user_original_item_stds))).cuda()
-        labels[:] = 1
+        labels[:] = 0.5
 
-        std_loss = torch.clamp(std_ratio - labels, min=0).mean()
+        std_loss = self.std_margin_loss(std_ratio, labels)
 
         return need_replace, replaceable_items, similarity_loss, similarity, std_loss
 
@@ -334,7 +338,6 @@ class LightGCN(BasicModel):
         # 得分最低的样本需要被替换
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
-        original_pos = pos
         need_replace, replaceable_items, similarity_loss, similarity, std_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
         # print(need_replace.shape)

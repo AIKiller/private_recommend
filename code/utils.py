@@ -46,7 +46,10 @@ class BPRLoss:
         reg_loss = reg_loss*self.weight_decay
         loss = loss + reg_loss + similarity_loss + std_loss
         self.opt.zero_grad()
+        # start_time = time()
         loss.backward()
+        # center_time = time()
+        # print('计算替换节点的时间', center_time - start_time)
         self.opt.step()
 
         return loss.cpu().item(), similarity
@@ -90,13 +93,6 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
         for item_id in need_replace_items:
             if item_id in train_pos:
                 need_replace.append([user_index, item_id])
-    #     print(len(need_replace))
-    #     exit()
-    #
-    #
-    # print(len(train_pos))
-    # print(len(need_replace))
-    # exit()
     return need_replace, user_score_index
 
 
