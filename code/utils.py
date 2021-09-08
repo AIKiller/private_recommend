@@ -70,12 +70,10 @@ def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_
     return pos_items
 
 
-@nb.jit(nopython=True)
+# @nb.jit(nopython=True)
 def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
-                                     pos_item_index, replace_ratio, train_pos, temp_items_feature):
+                                     pos_item_index, replace_ratio, train_pos):
     need_replace = []
-    user_replace_number = []
-    user_replace_feature = []
     for user_id, item_score in enumerate(sorted_pos_score):
         user_index = users[user_id]
         # 获取当前用户的所有选取概率大于0的元素
@@ -83,16 +81,13 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
         # 根据索引取出所有有效的item的得分排名
         valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]
         # 根据阈值计算 要替换的item的索引位置
-        need_replace_item_end = round(len(valid_pos_item_list) * replace_ratio)
-        need_replace_items = valid_pos_item_list[:need_replace_item_end]
-        user_replace_number.append(len(need_replace_items))
-        user_replace_feature.append(np.sum(temp_items_feature[need_replace_items], axis=0))
-
+        # attention 按照倒序排列选取尾端的数据
+        need_replace_item_start = len(valid_pos_item_list) - round(len(valid_pos_item_list) * replace_ratio)
+        need_replace_items = valid_pos_item_list[need_replace_item_start:]
         for item_id in need_replace_items:
             if item_id in train_pos:
                 need_replace.append([user_index, item_id])
-
-    return need_replace, user_replace_number, user_replace_feature
+    return need_replace
 
 
 def UniformSample_original(dataset, neg_ratio = 1):

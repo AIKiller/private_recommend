@@ -119,10 +119,13 @@ class LightGCN(BasicModel):
 
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
-            nn.BatchNorm1d(self.latent_dim),
-            nn.Linear(self.latent_dim, 1)
+            # nn.BatchNorm1d(self.latent_dim),
+            nn.Linear(self.latent_dim, 1),
+            nn.LeakyReLU()
         )
-        self.std_l1_loss = nn.L1Loss()
+        self.feature_transform = nn.Linear(self.latent_dim, self.latent_dim)
+
+        self.feature_loss = nn.MSELoss()
 
         if self.config['pretrain'] == 0:
             #             nn.init.xavier_uniform_(self.embedding_user.weight, gain=1)
@@ -220,12 +223,11 @@ class LightGCN(BasicModel):
         sorted_pos_index = sorted_item_score[1].detach().cpu().numpy()
         pos_item_index = pos_item_index.long().detach().cpu().numpy()
         train_pos = train_pos.long().detach().cpu().numpy()
-        temp_items_feature = all_items.detach().cpu().numpy()
         # 循环获取每个用户下被选中的item数据
-        need_replace, user_replace_number, user_replace_feature = utils.construct_need_replace_user_item(
+        need_replace = utils.construct_need_replace_user_item(
             users, sorted_pos_score, sorted_pos_index,
             pos_item_index, self.replace_ratio,
-            train_pos, temp_items_feature
+            train_pos
         )
 
         need_replace = np.array(need_replace)
@@ -248,7 +250,7 @@ class LightGCN(BasicModel):
         replaceable_items, similarity_loss, similarity = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
 
-        return need_replace, replaceable_items, similarity_loss, similarity, user_replace_number, user_replace_feature
+        return need_replace, replaceable_items, similarity_loss, similarity
 
     # 计算每个正样本和用户的得分
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
@@ -261,53 +263,36 @@ class LightGCN(BasicModel):
         batch_size = pos_item_index.size(0)
         # 获取用户的所有pos item的特征信息
         # batch_size  * max_len * dim
-        pos_emb = all_items[pos_item_index.long()]
+        pos_emb = all_items[pos_item_index.long()].detach()
         # 获取所有用的特信息
-        users_emb = all_users[users]
-        users_emb = users_emb.view(batch_size, 1, self.latent_dim)
-        users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
-        user_pos_item_feature = torch.cat([users_emb, pos_emb], dim=-1)
+        users_emb = all_users[users].detach()
+        users_expand_emb = users_emb.view(batch_size, 1, self.latent_dim)
+        users_expand_emb = users_expand_emb.expand(batch_size, max_len, self.latent_dim)
+        user_pos_item_feature = torch.cat([users_expand_emb, pos_emb], dim=-1)
         user_pos_item_feature = user_pos_item_feature.reshape(-1, 2 * self.latent_dim)
+        # 计算用户和item之间的attention vector
         user_item_scores = self.select_layer(user_pos_item_feature)
-        # 整理矩阵格式 进行softmax
         user_item_scores = user_item_scores.reshape(batch_size, max_len)
+        # 给mask的数据设置一个较小的得分， 使得补充的数据在attention中尽量接近于0
         user_item_scores = user_item_scores.masked_fill(mask=(pos_item_mask == 0), value=-1e9)
-        # 获取到每个pos item 选出来的几率
-        user_item_select_prob = F.softmax(user_item_scores, dim=-1)
-        sorted_pos_cores = torch.sort(user_item_select_prob, dim=1, descending=True)
+        # 通过softmax针对每个用户下的item进行归一化操作
+        attention_vector = F.softmax(user_item_scores, dim=-1)
 
-        del user_item_scores
-        del user_item_select_prob
+        # 针对获取到的attention进行排序
+        sorted_pos_cores = torch.sort(attention_vector, dim=1, descending=True)
 
-        # print(sorted_pos_cores)
         # 根据概率挑选item去替换
-        need_replace, replaceable_items, similarity_loss, similarity, user_replace_number, user_replace_feature = \
+        need_replace, replaceable_items, similarity_loss, similarity = \
             self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
-        # 开始计算原始user的item的方差数据
-        user_valid_item_number = pos_item_mask.sum(dim=-1).reshape(batch_size, 1)
-        # batch_size * max_len * 64
-        pos_emb = pos_emb * pos_item_mask.reshape(batch_size, max_len, 1)
-        # 每个用户下所有item的特征加和 batch_size * 64
-        user_item_sum_feature = pos_emb.sum(dim=1)
-        user_original_item_stds = (user_item_sum_feature / user_valid_item_number).std(dim=-1)
+        # 根据attention vector 针对每个用户下的item进行加和
+        pos_emb = pos_emb * attention_vector.reshape(batch_size, max_len, 1)
+        user_items_feature = pos_emb.sum(dim=1)
+        user_items_transform_feature = self.feature_transform(user_items_feature)
+        # 计算两个特征的loss
+        feature_loss = self.feature_loss(user_items_transform_feature, users_emb)
 
-        # 计算抽取出去item以后用户的方差
-        user_replace_number = torch.Tensor(user_replace_number).cuda()
-        user_replace_feature = torch.Tensor(user_replace_feature).cuda()
-
-        user_replace_number = user_replace_number.reshape(batch_size, 1)
-        user_selected_item_stds = ((user_item_sum_feature - user_replace_feature)
-                                   / (user_valid_item_number - user_replace_number)).std(dim=-1)
-
-        del user_item_sum_feature
-        del user_replace_feature
-
-        std_loss = self.std_l1_loss(user_selected_item_stds, user_original_item_stds)
-
-        # std_loss = 0.
-
-        return need_replace, replaceable_items, similarity_loss, similarity, std_loss
+        return need_replace, replaceable_items, similarity_loss, similarity, feature_loss
 
     def replace_pos_items(self, users, pos_items, need_replace, replaceable_items):
         users = users.detach().cpu().numpy()
