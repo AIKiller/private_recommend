@@ -45,7 +45,7 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = loss + reg_loss + similarity_loss + std_loss
+        loss = similarity_loss
         # print('std_loss', loss, reg_loss, similarity_loss, std_loss)
         # end_time = time()
         # print('计算时间', end_time - start_time)
@@ -53,6 +53,18 @@ class BPRLoss:
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
+
+        # for name, param in self.model.named_parameters():
+        #     if param.requires_grad:
+        #         if param.grad is not None:
+        #             print("{} has gradient: {} ".format(name, param.grad.mean()))
+        #         else:
+        #             print("{} has not gradient".format(name))
+        #     else:
+        #         print("{} is not need gradient".format(name))
+        # exit()
+
+
 
         return loss.cpu().item(), similarity
 
@@ -70,7 +82,7 @@ def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_
     return pos_items
 
 
-# @nb.jit(nopython=True)
+@nb.jit(nopython=True)
 def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
                                      pos_item_index, replace_ratio, train_pos):
     need_replace = []

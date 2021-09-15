@@ -119,11 +119,12 @@ class LightGCN(BasicModel):
 
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
-            # nn.BatchNorm1d(self.latent_dim),
             nn.Linear(self.latent_dim, 1),
             nn.LeakyReLU()
         )
-        self.feature_transform = nn.Linear(self.latent_dim, self.latent_dim)
+        self.feature_transform = nn.Sequential(
+            nn.Linear(self.latent_dim, self.latent_dim)
+        )
 
         self.feature_loss = nn.MSELoss()
 
@@ -235,9 +236,9 @@ class LightGCN(BasicModel):
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
         items_index = need_replace[:, 1]
-
+        all_items = all_items.detach()
         # 获取对应的特征
-        users_emb = all_users[users_index]
+        users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]
         need_replace_feature = torch.cat([users_emb, items_emb], dim=1)
         # 删除冗余数据
@@ -269,9 +270,10 @@ class LightGCN(BasicModel):
         users_expand_emb = users_emb.view(batch_size, 1, self.latent_dim)
         users_expand_emb = users_expand_emb.expand(batch_size, max_len, self.latent_dim)
         user_pos_item_feature = torch.cat([users_expand_emb, pos_emb], dim=-1)
-        user_pos_item_feature = user_pos_item_feature.reshape(-1, 2 * self.latent_dim)
+        # user_pos_item_feature = user_pos_item_feature.reshape(-1, 2 * self.latent_dim)
         # 计算用户和item之间的attention vector
         user_item_scores = self.select_layer(user_pos_item_feature)
+        del user_pos_item_feature
         user_item_scores = user_item_scores.reshape(batch_size, max_len)
         # 给mask的数据设置一个较小的得分， 使得补充的数据在attention中尽量接近于0
         user_item_scores = user_item_scores.masked_fill(mask=(pos_item_mask == 0), value=-1e9)
@@ -288,9 +290,13 @@ class LightGCN(BasicModel):
         # 根据attention vector 针对每个用户下的item进行加和
         pos_emb = pos_emb * attention_vector.reshape(batch_size, max_len, 1)
         user_items_feature = pos_emb.sum(dim=1)
+
         user_items_transform_feature = self.feature_transform(user_items_feature)
         # 计算两个特征的loss
         feature_loss = self.feature_loss(user_items_transform_feature, users_emb)
+        del users_emb
+        del user_items_feature
+        del user_items_transform_feature
 
         return need_replace, replaceable_items, similarity_loss, similarity, feature_loss
 
