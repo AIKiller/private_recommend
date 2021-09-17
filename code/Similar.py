@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 import numpy as np
-from SelfLoss import SimilarityMarginLoss
+from SelfLoss import MarginLoss
 import torch.nn.functional as F
 
 
@@ -28,7 +28,7 @@ class RegularSimilar(Similar):
         # 计算相相似度
         self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
         # 设置损失计算
-        self.similarity_loss = SimilarityMarginLoss()
+        self.similarity_loss = MarginLoss()
         # torch.nn.L1Loss()
         # 设置线性变换
         self.user_item_feature = nn.Sequential(
