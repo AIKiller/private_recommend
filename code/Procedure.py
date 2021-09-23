@@ -49,6 +49,8 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
                                                    posItems,
                                                    negItems,
                                                    batch_size=world.config['bpr_batch_size'])):
+        if len(batch_users) != world.config['bpr_batch_size']:
+            continue
         # 增加每个用户的正样本
         unique_user, pos_item_index, mask = load_users_pos_items(dataset, batch_users)
         # start_time = time()
