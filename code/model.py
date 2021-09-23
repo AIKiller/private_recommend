@@ -109,17 +109,27 @@ class LightGCN(BasicModel):
         self.A_split = self.config['A_split']
         self.replace_ratio = self.config['replace_ratio']
         self.similarity_ratio = self.config['similarity_ratio']
-        # 针对item进行固定抽样
+        self.sample_num = self.config['sample_num']
+        # 针对每个用户抽样相同数目得item
         item_indexes = np.arange(0, self.num_items)
-        sample_items = np.random.choice(item_indexes, 100, replace=False)
-        sample_items = torch.from_numpy(sample_items).cuda()
+        user_sample_items = []
+        for index in range(self.num_users):
+            visited_items = self.dataset.getUserPosItems([index])
+            # 获得一个未访问得item列表
+            unvisited_items = np.setdiff1d(item_indexes, visited_items)
+            sample_items = np.random.choice(unvisited_items, self.sample_num, replace=False)
+            user_sample_items.append(sample_items)
+
+        user_sample_items = torch.from_numpy(np.array(user_sample_items, dtype=np.int64)).cuda()
+
+        print(f"item sample is already to finish")
 
         self.embedding_user = torch.nn.Embedding(
             num_embeddings=self.num_users, embedding_dim=self.latent_dim)
         self.embedding_item = torch.nn.Embedding(
             num_embeddings=self.num_items, embedding_dim=self.latent_dim)
 
-        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim, sample_items)
+        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim, user_sample_items)
 
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
