@@ -21,12 +21,12 @@ class Similar(nn.Module):
 # 针对计算结果进行正规划
 class RegularSimilar(Similar):
 
-    def __init__(self, similarity_ratio, latent_dim, user_sample_items):
+    def __init__(self, similarity_ratio, latent_dim, sample_items):
         super(RegularSimilar, self).__init__()
         self.similarity_ratio = similarity_ratio
         self.latent_dim = latent_dim
         # 随机采样item
-        self.user_sample_items = user_sample_items
+        self.sample_items = sample_items
         # 计算相相似度
         self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
         # 设置损失计算
@@ -56,25 +56,26 @@ class RegularSimilar(Similar):
         # 原始的item特征
         items_emb = all_items[item_ids]
         expand_items_emb = items_emb.view(-1, 1, self.latent_dim)
+        sample_items = self.sample_items[user_ids]
+
         # 获取采样的item特征
-        sample_items = self.user_sample_items[user_ids]
         sample_item_feature = all_items[sample_items]
         # 计算一个用户item和采样item的原始的得分
-        item_rank_list = torch.mul(expand_items_emb, sample_item_feature)
-        item_rank_list = item_rank_list.sum(-1)
+        item_rank_score = torch.mul(expand_items_emb, sample_item_feature)
+        item_rank_score = item_rank_score.sum(dim=-1)
 
-        item_rank_list = torch.sort(item_rank_list, dim=1, descending=True)
+        item_rank_list = torch.sort(item_rank_score, dim=1, descending=False)
         # 针对每一个item取一个排序特征
         item_rank_feature = items_emb[item_rank_list[1]]
-        sample_item_sort_list = []
         # 设置一个排序之后的item列表
-        for iter_index, item_rank_index in enumerate(item_rank_list[1]):
-            sample_item_sort_list.append(sample_items[iter_index][item_rank_index])
-
-        sample_item_sort_list = torch.stack(sample_item_sort_list, dim=0)
+        sample_item_sort_list = []
+        for iter_id, rank_element in enumerate(item_rank_list[1]):
+            sample_item_sort_list.append(sample_items[iter_id][rank_element])
+        sample_item_sort_list = torch.stack(sample_item_sort_list)
 
         # 设置一个序列　用来计算每个item的位置
-        item_index_sequence = torch.arange(0, sample_item_feature.shape[1]).cuda()
+        item_index_sequence = torch.arange(0, sample_items.shape[1]).cuda()
+        item_index_sequence = item_index_sequence.view(1, -1).expand((len(item_ids), -1))
 
         # 基于用户和item的联合特征 生成一个新的特征Z
         user_item_feature = self.user_item_feature(union_feature)
@@ -88,7 +89,8 @@ class RegularSimilar(Similar):
         # 获取每个最高分的数据在排序之后位置信息
         position_index = (item_index_sequence * replace_probability).sum(dim=-1)
         # 基于位置信息计算一个相似度
-        similarity = position_index / sample_item_feature.shape[1]
+        similarity = position_index / self.sample_items.shape[1]
+        # print(position_index, similarity.mean())
         # 设置位置信息的阈值3
         labels = torch.empty(user_number).cuda()
         labels[:] = self.similarity_ratio
@@ -96,10 +98,8 @@ class RegularSimilar(Similar):
         similarity_loss = self.similarity_loss(similarity, labels)
         # 获取每个item需要替换的item项
         replaceable_items = (sample_item_sort_list * replace_probability).sum(dim=-1).long()
-        replaceable_item_feature = item_rank_feature * replace_probability.view(-1, sample_item_feature.shape[1], 1)
-        replaceable_item_feature = replaceable_item_feature.sum(dim=1)
 
-        return replaceable_item_feature, replaceable_items, similarity_loss, similarity.mean()
+        return replaceable_items, similarity_loss, similarity.mean()
 
     def regularize_similarity(self, replace_scores):
         return (replace_scores + 1) / 2

@@ -47,6 +47,4 @@ def parse_args():
                         help='set the ratio of needing to replace private item')
     parser.add_argument('--similarity_ratio', type=float, default=0.6,
                         help='the similarity of original and replaceable items')
-    parser.add_argument('--sample_num', type=float, default=100,
-                        help='sample from all items to every user')
     return parser.parse_args()
