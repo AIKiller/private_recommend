@@ -111,10 +111,11 @@ class LightGCN(BasicModel):
         self.similarity_ratio = self.config['similarity_ratio']
         # 针对item进行固定抽样
         item_indexes = np.arange(0, self.num_items)
-        sample_result = np.random.choice(item_indexes, 100, replace=False)
         sample_items = []
         for index in range(self.num_users):
-            sample_items.append(sample_result)
+            visited_items = self.dataset.getUserPosItems([index])
+            unvisited_items = np.setdiff1d(item_indexes, visited_items)
+            sample_items.append(np.random.choice(unvisited_items, 100, replace=False))
         sample_items = torch.from_numpy(np.array(sample_items)).cuda()
 
         self.embedding_user = torch.nn.Embedding(
@@ -214,12 +215,15 @@ class LightGCN(BasicModel):
         rating = self.f(torch.matmul(users_emb, items_emb.t()))
         return rating
 
-    def getEmbedding(self, users, pos_items, neg_items):
+    def getEmbedding(self, users, keep_pos_items, need_replace_pos_item, replaceable_items_feature, neg_items):
         all_users, all_items = self.computer()
         users_emb = all_users[users]
-        pos_emb = all_items[pos_items]
+        pos_emb = all_items[keep_pos_items]
         neg_emb = all_items[neg_items]
-
+        # 拼接需要替换的item
+        pos_emb = torch.cat([pos_emb, replaceable_items_feature])
+        # 换取替换了之后的item列表
+        pos_items = torch.cat([keep_pos_items, need_replace_pos_item])
         users_emb_ego = self.embedding_user(users)
         pos_emb_ego = self.embedding_item(pos_items)
         neg_emb_ego = self.embedding_item(neg_items)
@@ -256,10 +260,10 @@ class LightGCN(BasicModel):
         del all_users
 
         # 获取每个需要替换的item 对应的相似item
-        replaceable_items, similarity_loss, similarity = \
+        replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
 
-        return need_replace, replaceable_items, similarity_loss, similarity
+        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity
 
     # 计算每个正样本和用户的得分
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
@@ -292,7 +296,7 @@ class LightGCN(BasicModel):
         sorted_pos_cores = torch.sort(attention_vector, dim=1, descending=True)
 
         # 根据概率挑选item去替换
-        need_replace, replaceable_items, similarity_loss, similarity = \
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
             self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
         # 根据attention vector 针对每个用户下的item进行加和
@@ -306,30 +310,48 @@ class LightGCN(BasicModel):
         del user_items_feature
         del user_items_transform_feature
 
-        return need_replace, replaceable_items,  similarity_loss, similarity, feature_loss
+        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss
 
-    def replace_pos_items(self, users, pos_items, need_replace, replaceable_items):
-        users = users.detach().cpu().numpy()
-        pos_items = pos_items.detach().cpu().numpy()
-        replaceable_items = replaceable_items.cpu().numpy()
-        need_replace = np.array(need_replace)
-        pos_items = utils.replace_original_to_replaceable(users, pos_items, need_replace, replaceable_items)
-        return torch.from_numpy(pos_items).cuda()
+    def replace_pos_items(self, users, pos, neg, need_replace, replaceable_items):
+        numpy_users = users.detach().cpu().numpy()
+        numpy_pos = pos.detach().cpu().numpy()
+        # 生成一个需要被替换的item的mask
+        # 生成一个可以用于替换的item列表
+        pos_mask, replaceable_mask = \
+            utils.replace_original_to_replaceable(numpy_users, numpy_pos, need_replace)
+
+        # 开始分别替换user和neg对应的数据
+        # 取出来不需要替换的item
+        keep_bool = (pos_mask == 0)
+        keep_user = users[keep_bool]
+        keep_neg_items = neg[keep_bool]
+        keep_pos_items = pos[keep_bool]
+
+        # 拼接新的item
+        new_user = torch.cat([keep_user, users[pos_mask == 1]])
+        new_neg_items = torch.cat([keep_neg_items, neg[pos_mask == 1]])
+        need_replace_pos_item = replaceable_items[replaceable_mask]
+        return new_user, keep_pos_items, need_replace_pos_item, replaceable_mask, new_neg_items
 
     def bpr_loss(self, users, pos, neg, unique_user, pos_item_index=None, pos_item_mask=None):
         # 计算训练用户的正向样本的得分
         # 得分最低的样本需要被替换
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
-        need_replace, replaceable_items, similarity_loss, similarity, std_loss = \
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, std_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
         # 替换所有要替换的节点
-        pos = self.replace_pos_items(users, pos, need_replace, replaceable_items)
-        # center_time = time()
-        # print('计算替换节点的时间', center_time - start_time)
+        users, keep_pos_items, need_replace_pos_item, replaceable_mask, neg \
+            = self.replace_pos_items(users, pos, neg, need_replace, replaceable_items)
+        # 获取新替换的item的特征信息
+        replaceable_items_feature = replaceable_items_feature[replaceable_mask]
+
         # 进行loss 计算
         (users_emb, pos_emb, neg_emb,
-         userEmb0, posEmb0, negEmb0) = self.getEmbedding(users.long(), pos.long(), neg.long())
+         userEmb0, posEmb0, negEmb0) \
+            = self.getEmbedding(users.long(), keep_pos_items.long(),
+                                need_replace_pos_item.long(),
+                                replaceable_items_feature, neg.long())
         reg_loss = (1 / 2) * (userEmb0.norm(2).pow(2) +
                               posEmb0.norm(2).pow(2) +
                               negEmb0.norm(2).pow(2)) / float(len(users))

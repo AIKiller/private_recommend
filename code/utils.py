@@ -68,7 +68,9 @@ class BPRLoss:
 
 
 @nb.jit(nopython=True)
-def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_items):
+def replace_original_to_replaceable(users, pos_items, need_replace):
+    pos_mask = np.zeros(len(pos_items))
+    replaceable_mask = []
     for array_index, user_item in enumerate(need_replace):
         user_index = user_item[0]
         item_index = user_item[1]
@@ -76,9 +78,14 @@ def replace_original_to_replaceable(users, pos_items, need_replace, replaceable_
         item_index_array = np.nonzero(np.asfarray(pos_items == item_index))[0]
         if len(item_index_array) > 0:
             intersect = np.intersect1d(user_index_array, item_index_array)
-            for index in intersect:
-                pos_items[index] = replaceable_items[array_index]
-    return pos_items
+            if len(intersect) > 0:
+                for index in intersect:
+                    # 哪些需要被替换
+                    pos_mask[index] = 1
+                    # 哪些是可以被用于替换
+                    replaceable_mask.append(array_index)
+    replaceable_mask = np.array(replaceable_mask)
+    return pos_mask, replaceable_mask
 
 
 @nb.jit(nopython=True)
