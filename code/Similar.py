@@ -63,7 +63,7 @@ class RegularSimilar(Similar):
         item_rank_score = torch.mul(items_emb, sample_item_feature)
         item_rank_score = item_rank_score.sum(dim=-1)
         # 针对得分结果进行排序
-        item_ranking = torch.sort(item_rank_score, dim=1, descending=False)[1]
+        item_ranking = torch.sort(item_rank_score, dim=1, descending=True)[1]
         # 获得一个逆排序
         item_reverse_ranking = torch.sort(item_ranking, dim=1, descending=False)[1]
 
