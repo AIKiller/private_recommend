@@ -286,6 +286,7 @@ class Loader(BasicDataset):
         self.items_D[self.items_D == 0.] = 1.
         # pre-calculate
         # 获取所有的正向节点
+        self._disorderAllPos = []
         self._allPos = self.getUserPosItems(list(range(self.n_user)))
         self.__testDict = self.__build_test()
         print(f"{world.dataset} is ready to go")
@@ -309,6 +310,9 @@ class Loader(BasicDataset):
     @property
     def allPos(self):
         return self._allPos
+    @property
+    def disorderAllPos(self):
+        return self._disorderAllPos
 
     def _split_A_hat(self,A):
         A_fold = []
@@ -399,7 +403,11 @@ class Loader(BasicDataset):
     def getUserPosItems(self, users):
         posItems = []
         for user in users:
-            posItems.append(self.UserItemNet[user].nonzero()[1])
+            items = self.UserItemNet[user].nonzero()[1]
+            posItems.append(items)
+            # 打乱顺序
+            np.random.shuffle(items)
+            self._disorderAllPos.append(items)
         return posItems
 
     # def getUserNegItems(self, users):

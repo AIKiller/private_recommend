@@ -72,7 +72,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
 def load_users_pos_items(dataset, batch_users):
     batch_users = batch_users.detach().cpu().numpy()
     unique_user = list(set(batch_users))
-    all_pos_list = np.array(dataset.allPos, dtype=object)
+    all_pos_list = np.array(dataset.disorderAllPos, dtype=object)
     users_all_pos_items = all_pos_list[unique_user]
     lens = [len(item) for item in users_all_pos_items]
     max_pos_len = max(lens)
