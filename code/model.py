@@ -244,11 +244,10 @@ class LightGCN(BasicModel):
         )
 
         need_replace = np.array(need_replace)
-
+        all_items = all_items.detach()
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
         items_index = need_replace[:, 1]
-        all_items = all_items.detach()
         # 获取对应的特征
         users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]

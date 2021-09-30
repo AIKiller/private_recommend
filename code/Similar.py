@@ -63,28 +63,31 @@ class RegularSimilar(Similar):
         item_rank_score = torch.mul(items_emb, sample_item_feature)
         item_rank_score = item_rank_score.sum(dim=-1)
         # 针对得分结果进行排序
+        item_ranking_list = []
         item_ranking = torch.sort(item_rank_score, dim=1, descending=False)[1]
-        # 获得一个逆排序
-        item_reverse_ranking = torch.sort(item_ranking, dim=1, descending=False)[1]
+        for iter_id, item_ids in enumerate(item_ranking):
+            item_ranking_list.append(sample_items[iter_id][item_ids])
+        item_ranking_list = torch.stack(item_ranking_list)
 
-        # 设置一个排序之后的item列表
-        sample_item_sort_list = []
-        for iter_id, rank_element in enumerate(item_ranking):
-            sample_item_sort_list.append(sample_items[iter_id][rank_element])
-        sample_item_sort_list = torch.stack(sample_item_sort_list)
+        # 根据排序结果获取feature
+        item_ranking_feature = all_items[item_ranking_list]
 
         # 基于用户和item的联合特征 生成一个新的特征Z
         user_item_feature = self.user_item_feature(union_feature)
         user_item_feature = user_item_feature.view(-1, 1, self.latent_dim)
 
         # 计算新特征和所有采样item的得分
-        replace_score = torch.mul(user_item_feature, sample_item_feature)
+        replace_score = torch.mul(user_item_feature, item_ranking_feature)
         replace_score = replace_score.sum(dim=-1)
+
         # 采用得分最高的那个元素用于替换
         replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
+
+        item_sequence = torch.arange(0, self.sample_items.shape[1]).cuda()
+
         # 获取每个最高分的数据在排序之后位置信息
         # 下标是0开始的
-        position_index = (item_reverse_ranking * replace_probability).sum(dim=-1) + 1
+        position_index = (item_sequence * replace_probability).sum(dim=-1) + 1
         # 基于位置信息计算一个相似度
         similarity = position_index / self.sample_items.shape[1]
         # print(position_index, similarity.mean())
@@ -94,10 +97,10 @@ class RegularSimilar(Similar):
         # 计算相似度loss
         similarity_loss = self.similarity_loss(similarity, labels)
         # 获取每个item需要替换的item项
-        replaceable_items = (sample_item_sort_list * replace_probability).sum(dim=-1).long()
+        replaceable_items = (item_ranking_list * replace_probability).sum(dim=-1).long()
         # 取选择的item特征值
         replace_probability = replace_probability.unsqueeze(2)
-        replaceable_items_feature = (sample_item_feature * replace_probability).sum(dim=1)
+        replaceable_items_feature = (item_ranking_feature * replace_probability).sum(dim=1)
 
         return replaceable_items, replaceable_items_feature, similarity_loss, similarity.mean()
 

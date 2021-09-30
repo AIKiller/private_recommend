@@ -55,7 +55,7 @@ try:
                 count = 1
             else:
                 count += 1
-            if count > 5:
+            if count > 10:
                 # 训练数据的recall没有提升 出发early stop 策略
                 print('best precision:{0:.4f}\t best recall:{1:.4f}\t best ndcg:{2:.4f}'.format(
                     best_precision, best_recall, best_ndcg
