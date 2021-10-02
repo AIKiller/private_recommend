@@ -109,13 +109,14 @@ class LightGCN(BasicModel):
         self.A_split = self.config['A_split']
         self.replace_ratio = self.config['replace_ratio']
         self.similarity_ratio = self.config['similarity_ratio']
+        self.sample_num = self.config['sample_num']
         # 针对item进行固定抽样
         item_indexes = np.arange(0, self.num_items)
         sample_items = []
         for index in range(self.num_users):
             visited_items = self.dataset.getUserPosItems([index])
             unvisited_items = np.setdiff1d(item_indexes, visited_items)
-            sample_items.append(np.random.choice(unvisited_items, 100, replace=False))
+            sample_items.append(np.random.choice(unvisited_items, self.sample_num, replace=False))
         sample_items = torch.from_numpy(np.array(sample_items)).cuda()
 
         self.embedding_user = torch.nn.Embedding(
@@ -244,11 +245,11 @@ class LightGCN(BasicModel):
         )
 
         need_replace = np.array(need_replace)
-        all_items = all_items.detach()
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
         items_index = need_replace[:, 1]
         # 获取对应的特征
+        all_items = all_items.detach()
         users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]
         need_replace_feature = torch.cat([users_emb, items_emb], dim=1)

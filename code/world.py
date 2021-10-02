@@ -46,6 +46,7 @@ config['decay'] = args.decay
 config['pretrain'] = args.pretrain
 config['replace_ratio'] = args.replace_ratio
 config['similarity_ratio'] = args.similarity_ratio
+config['sample_num'] = args.sample_num
 config['A_split'] = False
 config['bigdata'] = False
 

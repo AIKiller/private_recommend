@@ -41,12 +41,12 @@ class BPRLoss:
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
         # start_time = time()
-        loss, reg_loss, similarity_loss, similarity = self.model.bpr_loss(
+        loss, reg_loss, similarity_loss, similarity, std_loss = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = loss + reg_loss + similarity_loss
-        # print('std_loss', loss, reg_loss, similarity_loss, std_loss)
+        loss = loss + reg_loss + similarity_loss + std_loss
+        # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
 
@@ -89,22 +89,55 @@ def replace_original_to_replaceable(users, pos_items, need_replace):
 
 
 @nb.jit(nopython=True)
-def construct_need_replace_user_item(user_list, pos_item_mask, pos_item_index, replace_ratio, train_pos):
-    # 开始循环构建数组
+def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
+                                     pos_item_index, replace_ratio, train_pos):
     need_replace = []
-    for index, user_id in enumerate(user_list):
-        pos_items = pos_item_index[index]
-        items_mask = (pos_item_mask[index] == 1)
-        items = pos_items[items_mask].astype(np.int64)
-        need_replace_item_start = len(items) - round(len(items) * replace_ratio)
-        need_replace_items = items[need_replace_item_start:]
-        # 循环 压入数据
+    for user_id, item_score in enumerate(sorted_pos_score):
+        user_index = users[user_id]
+        # 获取当前用户的所有选取概率大于0的元素
+        user_item_sorted_index = sorted_pos_index[user_id][item_score > 0]
+        # 根据索引取出所有有效的item的得分排名
+        valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]
+        # 根据阈值计算 要替换的item的索引位置
+        # attention 按照倒序排列选取尾端的数据
+        need_replace_item_start = len(valid_pos_item_list) - round(len(valid_pos_item_list) * replace_ratio)
+        need_replace_items = valid_pos_item_list[need_replace_item_start:]
         for item_id in need_replace_items:
             if item_id in train_pos:
-                need_replace.append([user_id, item_id])
-        # need_replace.extend([[user_index, item_id] for item_id in need_replace_items])
+                need_replace.append([user_index, item_id])
     return need_replace
 
+@nb.jit(nopython=True)
+def similar_dis_statistic(similarity):
+    similar_distribution = []
+    for iter_id, item_similarities in enumerate(similarity):
+        item_similar_distribution = np.zeros(10)
+        for element in item_similarities:
+            if 0 <= element <= 0.1:
+                item_similar_distribution[0] = item_similar_distribution[0] + 1
+            elif 0.1 < element <= 0.2:
+                item_similar_distribution[1] = item_similar_distribution[1] + 1
+            elif 0.2 < element <= 0.3:
+                item_similar_distribution[2] = item_similar_distribution[2] + 1
+            elif 0.3 < element <= 0.4:
+                item_similar_distribution[3] = item_similar_distribution[3] + 1
+            elif 0.4 < element <= 0.5:
+                item_similar_distribution[4] = item_similar_distribution[4] + 1
+            elif 0.5 < element <= 0.6:
+                item_similar_distribution[5] = item_similar_distribution[5] + 1
+            elif 0.6 < element <= 0.7:
+                item_similar_distribution[6] = item_similar_distribution[6] + 1
+            elif 0.7 < element <= 0.8:
+                item_similar_distribution[7] = item_similar_distribution[7] + 1
+            elif 0.8 < element <= 0.9:
+                item_similar_distribution[8] = item_similar_distribution[8] + 1
+            elif 0.9 < element <= 1:
+                item_similar_distribution[9] = item_similar_distribution[9] + 1
+            else:
+                print(element)
+                print('数据归一化有问题！！！！！')
+        similar_distribution.append(item_similar_distribution)
+    return similar_distribution
 
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
