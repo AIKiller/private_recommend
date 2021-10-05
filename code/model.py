@@ -260,10 +260,10 @@ class LightGCN(BasicModel):
         del all_users
 
         # 获取每个需要替换的item 对应的相似item
-        replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
+        replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
 
-        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity
+        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution
 
     # 计算每个正样本和用户的得分
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
@@ -296,7 +296,7 @@ class LightGCN(BasicModel):
         sorted_pos_cores = torch.sort(attention_vector, dim=1, descending=True)
 
         # 根据概率挑选item去替换
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution = \
             self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
         # 根据attention vector 针对每个用户下的item进行加和
@@ -310,7 +310,7 @@ class LightGCN(BasicModel):
         del user_items_feature
         del user_items_transform_feature
 
-        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss
+        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution, feature_loss
 
     def replace_pos_items(self, users, pos, neg, need_replace, replaceable_items):
         numpy_users = users.detach().cpu().numpy()
@@ -338,7 +338,7 @@ class LightGCN(BasicModel):
         # 得分最低的样本需要被替换
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, std_loss = \
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution, std_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
         # 替换所有要替换的节点
         users, keep_pos_items, need_replace_pos_item, replaceable_mask, neg \
@@ -363,7 +363,7 @@ class LightGCN(BasicModel):
         loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
         # end_time = time()
         # print('loss 计算的时间间隔', end_time - center_time)
-        return loss, reg_loss, similarity_loss, similarity, std_loss
+        return loss, reg_loss, similarity_loss, similarity, similar_distribution,  std_loss
 
     def forward(self, users, items):
         # 这里代码没有运行

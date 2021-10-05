@@ -41,7 +41,7 @@ class BPRLoss:
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
         # start_time = time()
-        loss, reg_loss, similarity_loss, similarity, std_loss = self.model.bpr_loss(
+        loss, reg_loss, similarity_loss, similarity, similar_distribution, std_loss = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
@@ -64,7 +64,7 @@ class BPRLoss:
         #         print("{} is not need gradient".format(name))
         # exit()
 
-        return loss.cpu().item(), similarity
+        return loss.cpu().item(), similarity, similar_distribution
 
 
 @nb.jit(nopython=True)

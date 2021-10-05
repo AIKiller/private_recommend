@@ -78,7 +78,7 @@ class RegularSimilar(Similar):
         # 原始的item 和 选择出来的item 做相似度loss计算
         similarity_loss, similarity = self.calculate_similar_loss(items_emb, replaceable_items_feature)
 
-        return replaceable_items, replaceable_items_feature, similarity_loss, similarity
+        return replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution
 
     def regularize_similarity(self, replace_scores):
         return (replace_scores + 1) / 2

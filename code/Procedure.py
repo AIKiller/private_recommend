@@ -42,6 +42,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     total_batch = len(users) // world.config['bpr_batch_size'] + 1
     aver_loss = 0.
     total_similarity = 0.
+    batch_similar_distribution = np.zeros(10, dtype=np.float32)
     for (batch_i,
          (batch_users,
           batch_pos,
@@ -54,19 +55,23 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
         # 增加每个用户的正样本
         unique_user, pos_item_index, mask = load_users_pos_items(dataset, batch_users)
         # start_time = time()
-        cri, similarity = bpr.stageOne(batch_users, batch_pos, batch_neg, unique_user, pos_item_index, mask)
+        cri, similarity, similar_distribution = bpr.stageOne(batch_users, batch_pos, batch_neg, unique_user, pos_item_index, mask)
         # end_time = time()
         # print('计算时间', end_time - start_time)
 
         aver_loss += cri
         total_similarity += similarity
+        batch_similar_distribution += similar_distribution
+
         if world.tensorboard:
             w.add_scalar(f'BPRLoss/BPR', cri, epoch * int(len(users) / world.config['bpr_batch_size']) + batch_i)
     aver_loss = aver_loss / total_batch
     aver_similarity = total_similarity / total_batch
+    batch_similar_distribution = batch_similar_distribution / total_batch
     time_info = timer.dict()
     timer.zero()
-    return f"loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}"
+    return aver_loss, time_info, aver_similarity, batch_similar_distribution
+    # return f"loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}-distribution{total_similar_distribution}"
 
 
 def load_users_pos_items(dataset, batch_users):
