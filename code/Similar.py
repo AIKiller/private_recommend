@@ -81,7 +81,10 @@ class RegularSimilar(Similar):
         return replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution
 
     def regularize_similarity(self, replace_scores):
-        return (replace_scores + 1) / 2
+        scores_min = torch.min(replace_scores, dim=-1).values.view(-1, 1)
+        scores_max = torch.max(replace_scores, dim=-1).values.view(-1, 1)
+        regularize_scores = (replace_scores - scores_min) / (scores_max - scores_min)
+        return regularize_scores
 
     def analyze_item_similar(self, original_feature, sample_item_feature):
         original_feature = original_feature.unsqueeze(1)
