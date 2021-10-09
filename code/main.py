@@ -44,7 +44,6 @@ best_ndcg = 0.
 count = 1
 best_similarity = 0.
 total_similarity = 0.
-total_similar_distribution = np.zeros(10, dtype=np.float32)
 try:
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
@@ -67,15 +66,12 @@ try:
                 ))
                 cprint("[Train END]")
                 break
-            print(total_similar_distribution / 10)
-            total_similar_distribution = np.zeros(10, dtype=np.float32)
             result['similarity'] = total_similarity/10
             print(result)
             total_similarity = 0.
 
-        aver_loss, time_info, aver_similarity, batch_similar_distribution = \
+        aver_loss, time_info, aver_similarity = \
             Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
-        total_similar_distribution += batch_similar_distribution
         total_similarity += aver_similarity.item()
         print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] '
               f'loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}')

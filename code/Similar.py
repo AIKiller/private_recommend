@@ -21,12 +21,10 @@ class Similar(nn.Module):
 # 针对计算结果进行正规划
 class RegularSimilar(Similar):
 
-    def __init__(self, similarity_ratio, latent_dim, sample_items):
+    def __init__(self, similarity_ratio, latent_dim):
         super(RegularSimilar, self).__init__()
         self.similarity_ratio = similarity_ratio
         self.latent_dim = latent_dim
-        # 随机采样item
-        self.sample_items = sample_items
         # 计算相相似度
         self.cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
         # 设置损失计算
@@ -50,50 +48,32 @@ class RegularSimilar(Similar):
         return similarity_loss, similarity.mean()
 
     def choose_replaceable_item(self, need_replace, union_feature, all_items):
-        user_ids = need_replace[:, 0]
         item_ids = need_replace[:, 1]
         # 原始的item特征
         items_emb = all_items[item_ids]
-        # 根据用户id获取每个用户采样的item列表
-        sample_items = self.sample_items[user_ids]
-        # 获取采样的item特征
-        sample_item_feature = all_items[sample_items]
 
         # 基于用户和item的联合特征 生成一个新的特征Z
         user_item_feature = self.user_item_feature(union_feature)
-        user_item_feature = user_item_feature.view(-1, 1, self.latent_dim)
 
         # 计算新特征和所有采样item的得分
-        replace_score = torch.mul(user_item_feature, sample_item_feature)
-        replace_score = replace_score.sum(dim=-1)
-        # 统计一下采样数据里面 各个item相似度的分布
-        similar_distribution = self.analyze_item_similar(items_emb, sample_item_feature)
+        replace_score = torch.mm(user_item_feature, all_items.T)
         # 采用得分最高的那个元素用于替换
         replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
-
-        replaceable_items = (sample_items * replace_probability).sum(dim=-1).long()
-
-        replace_probability = replace_probability.view(-1, sample_items.shape[1], 1)
-        replaceable_items_feature = (sample_item_feature * replace_probability).sum(dim=1)
+        # 获取选择的item索引
+        item_sequence = torch.arange(0, all_items.shape[0], dtype=torch.float).cuda()
+        replaceable_items = (item_sequence * replace_probability).sum(dim=-1).long()
+        # 获取选择的item特征信息
+        replaceable_items_feature = torch.mm(replace_probability, all_items)
         # 原始的item 和 选择出来的item 做相似度loss计算
         similarity_loss, similarity = self.calculate_similar_loss(items_emb, replaceable_items_feature)
 
-        return replaceable_items, replaceable_items_feature, similarity_loss, similarity, similar_distribution
+        return replaceable_items, replaceable_items_feature, similarity_loss, similarity
+
+    # def regularize_similarity(self, replace_scores):
+    #     scores_min = torch.min(replace_scores, dim=-1).values.view(-1, 1)
+    #     scores_max = torch.max(replace_scores, dim=-1).values.view(-1, 1)
+    #     regularize_scores = (replace_scores - scores_min) / (scores_max - scores_min)
+    #     return regularize_scores
 
     def regularize_similarity(self, replace_scores):
-        scores_min = torch.min(replace_scores, dim=-1).values.view(-1, 1)
-        scores_max = torch.max(replace_scores, dim=-1).values.view(-1, 1)
-        regularize_scores = (replace_scores - scores_min) / (scores_max - scores_min)
-        return regularize_scores
-
-    def analyze_item_similar(self, original_feature, sample_item_feature):
-        original_feature = original_feature.unsqueeze(1)
-        similarity = self.cos(original_feature, sample_item_feature)
-        # 归一化相似度
-        similarity = self.regularize_similarity(similarity)
-        similarity = similarity.cpu().numpy()
-        similar_distribution = utils.similar_dis_statistic(similarity)
-        similar_distribution = np.array(similar_distribution)
-        similar_distribution = np.sum(similar_distribution, axis=0)
-        similar_distribution = similar_distribution / sample_item_feature.shape[0] / sample_item_feature.shape[1]
-        return similar_distribution
+        return (replace_scores + 1) / 2

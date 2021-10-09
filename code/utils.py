@@ -41,7 +41,7 @@ class BPRLoss:
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
         # start_time = time()
-        loss, reg_loss, similarity_loss, similarity, similar_distribution, std_loss = self.model.bpr_loss(
+        loss, reg_loss, similarity_loss, similarity, std_loss = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
@@ -64,7 +64,7 @@ class BPRLoss:
         #         print("{} is not need gradient".format(name))
         # exit()
 
-        return loss.cpu().item(), similarity, similar_distribution
+        return loss.cpu().item(), similarity
 
 
 @nb.jit(nopython=True)
@@ -106,38 +106,6 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
             if item_id in train_pos:
                 need_replace.append([user_index, item_id])
     return need_replace
-
-@nb.jit(nopython=True)
-def similar_dis_statistic(similarity):
-    similar_distribution = []
-    for iter_id, item_similarities in enumerate(similarity):
-        item_similar_distribution = np.zeros(10)
-        for element in item_similarities:
-            if 0 <= element <= 0.1:
-                item_similar_distribution[0] = item_similar_distribution[0] + 1
-            elif 0.1 < element <= 0.2:
-                item_similar_distribution[1] = item_similar_distribution[1] + 1
-            elif 0.2 < element <= 0.3:
-                item_similar_distribution[2] = item_similar_distribution[2] + 1
-            elif 0.3 < element <= 0.4:
-                item_similar_distribution[3] = item_similar_distribution[3] + 1
-            elif 0.4 < element <= 0.5:
-                item_similar_distribution[4] = item_similar_distribution[4] + 1
-            elif 0.5 < element <= 0.6:
-                item_similar_distribution[5] = item_similar_distribution[5] + 1
-            elif 0.6 < element <= 0.7:
-                item_similar_distribution[6] = item_similar_distribution[6] + 1
-            elif 0.7 < element <= 0.8:
-                item_similar_distribution[7] = item_similar_distribution[7] + 1
-            elif 0.8 < element <= 0.9:
-                item_similar_distribution[8] = item_similar_distribution[8] + 1
-            elif 0.9 < element <= 1:
-                item_similar_distribution[9] = item_similar_distribution[9] + 1
-            else:
-                print(element)
-                print('数据归一化有问题！！！！！')
-        similar_distribution.append(item_similar_distribution)
-    return similar_distribution
 
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
