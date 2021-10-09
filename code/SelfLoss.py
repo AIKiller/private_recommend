@@ -7,13 +7,13 @@ class MarginLoss(nn.Module):
         super(MarginLoss, self).__init__()
         self.l1_loss = nn.SmoothL1Loss()
 
-    # def forward(self, predict, label):
-    #     return torch.clamp(predict - label, min=0).mean()
-
     def forward(self, predict, label):
-        target = torch.zeros_like(predict)
-        target[:] = label
-        return self.l1_loss(predict, target)
+        return torch.clamp(predict - label, min=0).mean()
+
+    # def forward(self, predict, label):
+    #     target = torch.zeros_like(predict)
+    #     target[:] = label
+    #     return self.l1_loss(predict, target)
 
     # def forward(self, predict, label):
     #     #   label - 0.4 < x < label
