@@ -49,6 +49,9 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
                                                    posItems,
                                                    negItems,
                                                    batch_size=world.config['bpr_batch_size'])):
+
+        if len(batch_users) < world.config['bpr_batch_size']:
+            continue
         # 增加每个用户的正样本
         unique_user, pos_item_index, mask = load_users_pos_items(dataset, batch_users)
         # start_time = time()
@@ -183,3 +186,37 @@ def Test(dataset, Recmodel, epoch, w=None, multicore=0):
             pool.close()
         # print(results)
         return results
+
+
+def output_generative_data(dataset, recommend_model, weight_file):
+    # 加载最优的模型数据
+    recommend_model.load_state_dict(torch.load(weight_file, map_location=torch.device('cpu')))
+    print(f"loaded model best weights from {weight_file}")
+    # 数据集中所有用户的item列表
+    all_pos_list = np.array(dataset.allPos, dtype=object)
+    # 生成数据集
+    users = np.arange(0, dataset.n_users)
+    out_new_train_data = []
+    # 循环获取每个用户要替换的数据和被替换的数据信息
+    output_file_name = '../output/{}-replace{}-similarity{}-{}.txt'\
+        .format(world.dataset, world.config['replace_ratio'],
+                world.config['similarity_ratio'], 'original')
+    with open(output_file_name, 'w+') as f:
+        for user_id in users:
+            users_all_pos_items = all_pos_list[user_id]
+            pos_item_index = np.array(users_all_pos_items.tolist())
+            user_pos_items = np.array([pos_item_index])
+            train_pos = torch.tensor([pos_item_index])
+            mask = [np.ones(len(pos_item_index))]
+            unique_user = [user_id]
+            need_replace, replaceable_items, similarity_loss, similarity = \
+                recommend_model.computer_pos_score(unique_user, user_pos_items, mask, train_pos)
+            original_items = need_replace[:, 1]
+            for iter_id, original_item in enumerate(original_items):
+                item_index = np.argwhere(pos_item_index == original_item)[0][0]
+                pos_item_index[item_index] = replaceable_items[iter_id]
+            pos_item_index = pos_item_index.astype(np.str)
+            out_str = str(user_id) + ' ' + ' '.join(pos_item_index.tolist())+'\n'
+            f.write(out_str)
+    world.cprint(f"output new train is successful, save path is {output_file_name}")
+

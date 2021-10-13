@@ -53,6 +53,7 @@ try:
                 best_precision = result['precision'][0]
                 best_ndcg = result['ndcg'][0]
                 count = 1
+                torch.save(Recmodel.state_dict(), weight_file)
             else:
                 count += 1
             if count > 5:
@@ -61,12 +62,13 @@ try:
                     best_precision, best_recall, best_ndcg
                 ))
                 cprint("[Train END]")
+                Procedure.output_generative_data(dataset, Recmodel, weight_file)
                 break
             print(result)
 
         output_information = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
         print(f'EPOCH[{epoch+1}/{world.TRAIN_epochs}] {output_information}')
-        torch.save(Recmodel.state_dict(), weight_file)
+
 finally:
     if world.tensorboard:
         w.close()
