@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class MarginLoss(nn.Module):
+class SimilarityMarginLoss(nn.Module):
     def __init__(self):
-        super(MarginLoss, self).__init__()
+        super(SimilarityMarginLoss, self).__init__()
         self.l1_loss = nn.SmoothL1Loss()
 
     def forward(self, predict, label):

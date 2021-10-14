@@ -200,7 +200,7 @@ def output_generative_data(dataset, recommend_model, weight_file):
     # 循环获取每个用户要替换的数据和被替换的数据信息
     output_file_name = '../output/{}-replace{}-similarity{}-{}.txt'\
         .format(world.dataset, world.config['replace_ratio'],
-                world.config['similarity_ratio'], 'original')
+                world.config['similarity_ratio'], 'attention+ranking+sample')
     with open(output_file_name, 'w+') as f:
         for user_id in users:
             users_all_pos_items = all_pos_list[user_id]

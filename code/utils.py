@@ -45,7 +45,7 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = loss + reg_loss + 200 * similarity_loss + std_loss
+        loss = loss + reg_loss + similarity_loss + std_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
@@ -165,7 +165,7 @@ def set_seed(seed):
 
 def getFileName():
     if world.model_name == 'mf':
-        file = f"mf-{world.dataset}-{world.config['latent_dim_rec']}" \
+        file = f"attention+ranking+sample-mf-{world.dataset}-{world.config['latent_dim_rec']}" \
                f"-{world.config['replace_ratio']}-{world.config['similarity_ratio']}.pth.tar"
     elif world.model_name == 'lgn':
         file = f"lgn-{world.dataset}-{world.config['lightGCN_n_layers']}-{world.config['latent_dim_rec']}" \
