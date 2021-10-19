@@ -54,6 +54,7 @@ GPU = torch.cuda.is_available()
 device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
+is_train = True
 
 dataset = args.dataset
 model_name = args.model

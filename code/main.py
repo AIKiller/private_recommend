@@ -62,7 +62,6 @@ try:
                     best_precision, best_recall, best_ndcg
                 ))
                 cprint("[Train END]")
-                Procedure.output_generative_data(dataset, Recmodel, weight_file)
                 break
             print(result)
 
@@ -72,3 +71,5 @@ try:
 finally:
     if world.tensorboard:
         w.close()
+
+Procedure.output_generative_data(dataset, Recmodel, weight_file)

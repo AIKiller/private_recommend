@@ -56,22 +56,15 @@ class PureMF(BasicModel):
         self.replace_ratio = config['replace_ratio']
         self.similarity_ratio = config['similarity_ratio']
         self.sample_num = config['sample_num']
-        # 针对item进行固定抽样
-        item_indexes = np.arange(0, self.num_items)
-        sample_items = []
-        for index in range(self.num_users):
-            visited_items = dataset.getUserPosItems([index])
-            unvisited_items = np.setdiff1d(item_indexes, visited_items)
-            sample_items.append(np.random.choice(unvisited_items, self.sample_num, replace=False))
-        sample_items = torch.from_numpy(np.array(sample_items)).cuda()
         # 初始化模型信息
-        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim, sample_items)
+        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
             nn.Linear(self.latent_dim, 1),
             nn.LeakyReLU()
         )
         self.feature_transform = nn.Sequential(
+            nn.BatchNorm1d(self.latent_dim),
             nn.Linear(self.latent_dim, self.latent_dim)
         )
         self.feature_loss = nn.MSELoss()
@@ -187,34 +180,14 @@ class PureMF(BasicModel):
 
         # 开始分别替换user和neg对应的数据
         # 取出来不需要替换的item
-        keep_bool = (pos_mask == 0)
-        keep_user = users[keep_bool]
-        keep_neg_items = neg[keep_bool]
-        keep_pos_items = pos[keep_bool]
+        users = users[pos_mask == 1]
+        neg = neg[pos_mask == 1]
 
-        # 拼接新的item
-        new_user = torch.cat([keep_user, users[pos_mask == 1]])
-        new_neg_items = torch.cat([keep_neg_items, neg[pos_mask == 1]])
-        need_replace_pos_item = replaceable_items[replaceable_mask]
-        return new_user, keep_pos_items, need_replace_pos_item, replaceable_mask, new_neg_items
+        return users, neg, replaceable_mask
 
-    def bpr_loss(self, users, pos, neg, unique_user=None, pos_item_index=None, pos_item_mask=None):
-        # 计算训练用户的正向样本的得分
-        # 得分最低的样本需要被替换
-        # 在所有的节点里面挑选相似度在阈值范围的节点
-        # start_time = time()
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, std_loss = \
-            self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
-        # 替换所有要替换的节点
-        users, keep_pos_items, need_replace_pos_item, replaceable_mask, neg \
-            = self.replace_pos_items(users, pos, neg, need_replace, replaceable_items)
-        # 获取新替换的item的特征信息
-        replaceable_items_feature = replaceable_items_feature[replaceable_mask]
-
+    def get_original_bpr_loss(self, users, pos, neg):
         users_emb = self.embedding_user(users.long())
-
-        pos_emb = self.embedding_item(keep_pos_items)
-        pos_emb = torch.cat([pos_emb, replaceable_items_feature])
+        pos_emb = self.embedding_item(pos)
         neg_emb = self.embedding_item(neg.long())
         pos_scores = torch.sum(users_emb * pos_emb, dim=1)
         neg_scores = torch.sum(users_emb * neg_emb, dim=1)
@@ -223,7 +196,29 @@ class PureMF(BasicModel):
                               pos_emb.norm(2).pow(2) +
                               neg_emb.norm(2).pow(2)) / float(len(users))
 
-        return loss, reg_loss, similarity_loss, similarity, std_loss
+        return loss, reg_loss
+
+
+    def bpr_loss(self, users, pos, neg, unique_user=None, pos_item_index=None, pos_item_mask=None):
+        # 计算训练用户的正向样本的得分
+        # 得分最低的样本需要被替换
+        # 在所有的节点里面挑选相似度在阈值范围的节点
+        # start_time = time()
+        CF1_loss, CF1_reg_loss = self.get_original_bpr_loss(users, pos, neg)
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, std_loss = \
+            self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
+        # 替换所有要替换的节点
+        users, neg, replaceable_mask \
+            = self.replace_pos_items(users, pos, neg, need_replace, replaceable_items)
+        # 计算新替换的item的bpr loss
+        users_emb = self.embedding_user(users.long())
+        pos_emb = replaceable_items_feature[replaceable_mask]
+        neg_emb = self.embedding_item(neg.long())
+        pos_scores = torch.sum(users_emb * pos_emb, dim=1)
+        neg_scores = torch.sum(users_emb * neg_emb, dim=1)
+        CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
+
+        return CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss
 
 
     def forward(self, users, items):
