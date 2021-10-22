@@ -46,6 +46,7 @@ class BPRLoss:
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
         loss = loss + reg_loss + similarity_loss
+        # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
 
@@ -89,7 +90,6 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index, 
                 need_replace.append([user_index, item_id])
         # need_replace.extend([[user_index, item_id] for item_id in need_replace_items])
     return need_replace
-
 
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
