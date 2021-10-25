@@ -1,6 +1,8 @@
 from torch import nn
 import torch
 import numpy as np
+import world
+import torch.nn.functional as F
 from SelfLoss import SimilarityMarginLoss
 
 
@@ -9,7 +11,7 @@ class Similar(nn.Module):
         super(Similar, self).__init__()
 
     # 计算要替换的item和可替换item之间的相似度和loss
-    def calculate_similar_loss(self, all_items, original_items, sorted_items):
+    def calculate_similar_loss(self, replaceable_feature, original_feature):
         raise NotImplementedError
 
     # 根据用户和item对形成新的特征X 并使用这个特征 给每个要替换的item 选择可以替换的item
@@ -36,15 +38,12 @@ class RegularSimilar(Similar):
             nn.LeakyReLU()
         )
 
-    def calculate_similar_loss(self, all_items, original_items, sorted_items):
-        labels = torch.empty((len(original_items))).cuda()
+    def calculate_similar_loss(self, replaceable_feature, original_feature):
+        labels = torch.empty((replaceable_feature.shape[0])).cuda()
         labels[:] = self.similarity_ratio
         # 获取原始item和要替换的item的特征
-        sorted_items = sorted_items.view(-1)
-        original_item_features = all_items[original_items]
-        sorted_item_feature = all_items[sorted_items]
         # 计算原始向量 和  可替换向量之间的 相似度
-        similarity = self.cos(original_item_features, sorted_item_feature)
+        similarity = self.cos(original_feature, replaceable_feature)
         # 归一化相似度
         similarity = self.regularize_similarity(similarity)
         # 计算每个向量的相似度和相似度阈值的loss
@@ -52,20 +51,28 @@ class RegularSimilar(Similar):
         similarity_loss = self.similarity_loss(similarity, labels)
         return similarity_loss, similarity.mean()
 
-    def choose_replaceable_item(self, user_item_id, item_feature, all_items):
-        user_item_id = np.array(user_item_id)
-        # 根据<user, item>特征对 生成新的特征Z  needReplaceNodes * latent_dim
-        user_item_feature = self.user_item_feature(item_feature)
-        # 计算每个需要替换的item 和 所有item的得分
+    def choose_replaceable_item(self, need_replace, union_feature, all_items):
+        item_ids = need_replace[:, 1]
+        # 原始的item特征
+        items_emb = all_items[item_ids]
+        # 基于用户和item的联合特征 生成一个新的特征Z
+        user_item_feature = self.user_item_feature(union_feature)
+        # 计算新特征和所有采样item的得分
         replace_score = torch.mm(user_item_feature, all_items.T)
-        # # 归一化点乘结果
-        # replace_score = self.regularize_similarity(replace_score)
-        # 取每个节点下面得分最高的节点
-        top_score_items = torch.topk(replace_score, 1, dim=1)
-        original_items = user_item_id[:, 1]
-        # 计算可替换item和原始item之间的关系
-        similarity_loss, similarity = self.calculate_similar_loss(all_items, original_items, top_score_items[1])
-        replaceable_items = top_score_items[1].view(-1)
+        # 采用得分最高的那个元素用于替换
+        if world.is_train:
+            replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
+            item_sequence = torch.arange(0, all_items.shape[0]).view(-1, 1).float().cuda()
+            replaceable_items = torch.mm(replace_probability, item_sequence).view(-1).long()
+            # 获得新的item的特征信息
+            replaceable_items_feature = torch.mm(replace_probability, all_items)
+            # 原始的item 和 选择出来的item 做相似度loss计算
+            similarity_loss, similarity = self.calculate_similar_loss(items_emb, replaceable_items_feature)
+
+        else:
+            replaceable_items = torch.argmax(replace_score, dim=1)
+            replaceable_items_feature = all_items[replaceable_items]
+            similarity_loss, similarity = self.calculate_similar_loss(items_emb, replaceable_items_feature)
 
         return replaceable_items, similarity_loss, similarity
 
