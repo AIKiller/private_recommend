@@ -30,7 +30,7 @@ if not os.path.exists(FILE_PATH):
 
 
 config = {}
-all_dataset = ['lastfm', 'gowalla', 'yelp2018', 'amazon-book']
+all_dataset = ['lastfm', 'gowalla', 'KS10', 'yelp2018', 'amazon-book']
 all_models  = ['mf', 'lgn']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
@@ -61,9 +61,7 @@ if dataset not in all_dataset:
 if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
-
-
-
+is_train = True
 TRAIN_epochs = args.epochs
 LOAD = args.load
 PATH = args.path

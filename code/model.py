@@ -52,6 +52,9 @@ class PureMF(BasicModel):
         self.num_users = dataset.n_users
         self.num_items = dataset.m_items
         self.latent_dim = config['latent_dim_rec']
+        self.replace_ratio = config['replace_ratio']
+        self.similarity_ratio = config['similarity_ratio']
+        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
         self.f = nn.Sigmoid()
         self.__init_weight()
 
@@ -69,26 +72,21 @@ class PureMF(BasicModel):
         scores = torch.matmul(users_emb, items_emb.t())
         return self.f(scores)
 
-    # 根据的采样率获取分数较低的节点
-    def sample_low_score_pos_item(self, users, sorted_pos, pos_item_index, all_users, all_items, train_pos):
-        # start_time = time()
-        users = users.detach().cpu().numpy()
-        sorted_pos_score = sorted_pos[0].detach().cpu().numpy()
-        sorted_pos_index = sorted_pos[1].detach().cpu().numpy()
-        pos_item_index = pos_item_index.long().detach().cpu().numpy()
-        train_pos = train_pos.long().detach().cpu().numpy()
-        # 开始构建每个用户需要替换的item
-        need_replace = utils.construct_need_replace_user_item(
-            users, sorted_pos_score, sorted_pos_index,
-            pos_item_index, self.replace_ratio,
-            train_pos
-        )
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
+        # 计算每个正样本和用户的得分
+        # 唯一用户标识
+        # 每个用户的pos items
+        # 每个用户pos items的mask
+        # 当前批次要训练的item数据
+    def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
+        all_users = self.embedding_user.weight
+        all_items = self.embedding_item.weight
+        # 根据阈值获取每个用户需要替换的items
+        user_list = np.array(users, dtype=np.int32)
+        train_pos = train_pos.detach().cpu().numpy()
+        need_replace = utils.construct_need_replace_user_item(user_list, pos_item_mask,
+                                                              pos_item_index, self.replace_ratio, train_pos)
 
-        del sorted_pos_score
-        del sorted_pos_index
-        del pos_item_index
+        # 准备需要替换的信息
         need_replace = np.array(need_replace)
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
@@ -105,38 +103,6 @@ class PureMF(BasicModel):
         # 获取每个需要替换的item 对应的相似item
         replaceable_items, similarity_loss, similarity = \
             self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
-
-        return need_replace, replaceable_items, similarity_loss, similarity
-
-    # 计算每个正样本和用户的得分
-    def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
-        # start_time = time()
-        all_users = self.embedding_user.weight
-        all_items = self.embedding_item.weight
-        users = torch.tensor(list(users)).long()
-        pos_item_index = torch.from_numpy(pos_item_index).cuda()
-        # 把所有占位的元素的分数设置为一个很小的得分
-        # pos_item_mask[pos_item_mask == 0] = -100
-        # pos_item_mask = torch.from_numpy(pos_item_mask).cuda()
-        max_len = pos_item_index.size(1)
-        batch_size = pos_item_index.size(0)
-        users_emb = all_users[users]
-        users_emb = users_emb.view(batch_size, 1, self.latent_dim)
-        users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
-        pos_emb = all_items[pos_item_index.long()]
-        # 计算每个用户和自己pos item 之间的得分
-        pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = torch.sum(pos_scores, dim=2)
-        # 遮挡其余的占位数据
-        pos_scores[pos_item_mask == 0] = -100
-        # 针对评分结果进行排序
-        sorted_pos_cores = torch.sort(pos_scores, dim=1, descending=True)
-        #
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
-        # 采样所有用户的评分较低的pos item用于替换
-        need_replace, replaceable_items, similarity_loss, similarity = \
-            self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
         return need_replace, replaceable_items, similarity_loss, similarity
 
@@ -194,15 +160,11 @@ class LightGCN(BasicModel):
         self.n_layers = self.config['lightGCN_n_layers']
         self.keep_prob = self.config['keep_prob']
         self.A_split = self.config['A_split']
-        self.replace_ratio = self.config['replace_ratio']
-        self.similarity_ratio = self.config['similarity_ratio']
 
         self.embedding_user = torch.nn.Embedding(
             num_embeddings=self.num_users, embedding_dim=self.latent_dim)
         self.embedding_item = torch.nn.Embedding(
             num_embeddings=self.num_items, embedding_dim=self.latent_dim)
-
-        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
 
 
         if self.config['pretrain'] == 0:
