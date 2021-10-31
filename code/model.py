@@ -211,9 +211,9 @@ class PureMF(BasicModel):
         users, neg, replaceable_mask \
             = self.replace_pos_items(users, pos, neg, need_replace, replaceable_items)
         # 计算新替换的item的bpr loss
-        users_emb = self.embedding_user(users.long())
+        users_emb = self.embedding_user(users.long()).detach()
         pos_emb = replaceable_items_feature[replaceable_mask]
-        neg_emb = self.embedding_item(neg.long())
+        neg_emb = self.embedding_item(neg.long()).detach()
         pos_scores = torch.sum(users_emb * pos_emb, dim=1)
         neg_scores = torch.sum(users_emb * neg_emb, dim=1)
         CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))

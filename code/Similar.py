@@ -58,11 +58,12 @@ class RegularSimilar(Similar):
         # 采用得分最高的那个元素用于替换
         if world.is_train:
             replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
-            item_sequence = torch.arange(0, all_items.shape[0]).view(-1, 1).float().cuda()
-            replaceable_items = torch.mm(replace_probability, item_sequence).view(-1).long()
 
+            item_sequence = torch.arange(0, all_items.shape[0]).view(1, -1).cuda()
+            replaceable_items = (replace_probability * item_sequence).sum(dim=-1).long()
             # 获得新的item的特征信息
             replaceable_items_feature = torch.mm(replace_probability, all_items)
+
             # 原始的item 和 选择出来的item 做相似度loss计算
             similarity_loss, similarity = self.calculate_similar_loss(items_emb, replaceable_items_feature)
 

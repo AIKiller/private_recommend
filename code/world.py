@@ -55,7 +55,7 @@ device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
 is_train = True
-
+output_prefix = 'CF1+CF2-l1-90'
 dataset = args.dataset
 model_name = args.model
 if dataset not in all_dataset:
@@ -65,7 +65,7 @@ if model_name not in all_models:
 
 
 
-
+is_train=True
 TRAIN_epochs = args.epochs
 LOAD = args.load
 PATH = args.path
