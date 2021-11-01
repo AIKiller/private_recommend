@@ -11,4 +11,3 @@ class SimilarityMarginLoss(nn.Module):
         target = torch.zeros_like(predict)
         target[:] = label
         return self.l1_loss(predict, target)
-

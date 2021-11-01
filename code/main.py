@@ -71,5 +71,4 @@ finally:
     if world.tensorboard:
         w.close()
 
-
 Procedure.output_generative_data(dataset, Recmodel, weight_file)
