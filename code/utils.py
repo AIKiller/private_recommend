@@ -41,11 +41,11 @@ class BPRLoss:
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
         # start_time = time()
-        loss, reg_loss, similarity_loss, similarity = self.model.bpr_loss(
+        loss, reg_loss, similarity_loss, feature_loss, similarity = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = loss + reg_loss + 30 * similarity_loss
+        loss = loss + reg_loss + similarity_loss + feature_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
@@ -53,16 +53,6 @@ class BPRLoss:
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
-
-        # for name, param in self.model.named_parameters():
-        #     if param.requires_grad:
-        #         if param.grad is not None:
-        #             print("{} has gradient: {} ".format(name, param.grad.mean()))
-        #         else:
-        #             print("{} has not gradient".format(name))
-        #     else:
-        #         print("{} is not need gradient".format(name))
-        # exit()
 
         return loss.cpu().item(), similarity
 
@@ -86,26 +76,24 @@ def replace_original_to_replaceable(users, pos_items, need_replace, item_num):
     return pos_mask, replaceable_mask
 
 @nb.jit(nopython=True)
-def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index, pos_item_index, replace_ratio, train_pos):
-    # 开始循环构建数组
+def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
+                                     pos_item_index, replace_ratio, train_pos):
     need_replace = []
     for user_id, item_score in enumerate(sorted_pos_score):
         user_index = users[user_id]
-        # 获取当前用户的所有评分大于-1e-8的元素
-        item_score = item_score.astype(np.float64)
-        user_item_sorted_index = sorted_pos_index[user_id][item_score > -100]
+        # 获取当前用户的所有选取概率大于0的元素
+        user_item_sorted_index = sorted_pos_index[user_id][item_score > 0]
         # 根据索引取出所有有效的item的得分排名
         valid_pos_item_list = pos_item_index[user_id][user_item_sorted_index]
         # 根据阈值计算 要替换的item的索引位置
+        # attention 按照倒序排列选取尾端的数据
         need_replace_item_start = len(valid_pos_item_list) - round(len(valid_pos_item_list) * replace_ratio)
         need_replace_items = valid_pos_item_list[need_replace_item_start:]
-        # print(len(valid_pos_item_list), len(need_replace_items))
-        # print(len(valid_pos_item_list) , len(need_replace_items), len(need_replace_items)/len(valid_pos_item_list) )
         for item_id in need_replace_items:
             if item_id in train_pos:
                 need_replace.append([user_index, item_id])
-        # need_replace.extend([[user_index, item_id] for item_id in need_replace_items])
     return need_replace
+
 
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
@@ -165,7 +153,7 @@ def set_seed(seed):
 
 def getFileName():
     if world.model_name == 'mf':
-        file = f"mf-similarity-l1-embedding-30-{world.dataset}-{world.config['latent_dim_rec']}.pth.tar"
+        file = f"mf-attention-similarity-l1-{world.dataset}-{world.config['latent_dim_rec']}.pth.tar"
     elif world.model_name == 'lgn':
         file = f"lgn-{world.dataset}-{world.config['lightGCN_n_layers']}-{world.config['latent_dim_rec']}.pth.tar"
     return os.path.join(world.FILE_PATH,file)

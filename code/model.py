@@ -13,7 +13,7 @@ from dataloader import BasicDataset
 from torch import nn
 import numpy as np
 import utils
-from time import time
+import torch.nn.functional as F
 from Similar import RegularSimilar
 
 
@@ -55,6 +55,20 @@ class PureMF(BasicModel):
         self.replace_ratio = config['replace_ratio']
         self.similarity_ratio = config['similarity_ratio']
         self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
+        # 选择网络
+        self.select_layer = nn.Sequential(
+            nn.Linear(2 * self.latent_dim, self.latent_dim),
+            # nn.BatchNorm1d(self.latent_dim),
+            nn.Linear(self.latent_dim, 1),
+            nn.LeakyReLU()
+        )
+        # 特征合成网络
+        self.feature_transform = nn.Sequential(
+            nn.BatchNorm1d(self.latent_dim),
+            nn.Linear(self.latent_dim, self.latent_dim)
+        )
+        # 均方差损失函数
+        self.feature_loss = nn.MSELoss()
         self.f = nn.Sigmoid()
         self.__init_weight()
 
@@ -73,34 +87,31 @@ class PureMF(BasicModel):
         return self.f(scores)
 
     # 根据的采样率获取分数较低的节点
-    def sample_low_score_pos_item(self, users, sorted_pos, pos_item_index, all_users, all_items, train_pos):
-        # start_time = time()
+    def sample_low_score_pos_item(self, users, sorted_item_score, pos_item_index, all_users, all_items, train_pos):
         users = users.detach().cpu().numpy()
-        sorted_pos_score = sorted_pos[0].detach().cpu().numpy()
-        sorted_pos_index = sorted_pos[1].detach().cpu().numpy()
+        sorted_pos_score = sorted_item_score[0].detach().cpu().numpy()
+        sorted_pos_index = sorted_item_score[1].detach().cpu().numpy()
         pos_item_index = pos_item_index.long().detach().cpu().numpy()
         train_pos = train_pos.long().detach().cpu().numpy()
-        # 开始构建每个用户需要替换的item
+        # 循环获取每个用户下被选中的item数据
         need_replace = utils.construct_need_replace_user_item(
             users, sorted_pos_score, sorted_pos_index,
             pos_item_index, self.replace_ratio,
             train_pos
         )
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
 
-        del sorted_pos_score
-        del sorted_pos_index
-        del pos_item_index
         need_replace = np.array(need_replace)
+
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]
         items_index = need_replace[:, 1]
+        all_items = all_items.detach()
         # 获取对应的特征
-        users_emb = all_users[users_index]
+        users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]
         need_replace_feature = torch.cat([users_emb, items_emb], dim=1)
         # 删除冗余数据
+        del pos_item_index
         del users_emb
         del items_emb
         del all_users
@@ -116,32 +127,45 @@ class PureMF(BasicModel):
         # start_time = time()
         all_users = self.embedding_user.weight
         all_items = self.embedding_item.weight
+
         users = torch.tensor(list(users)).long()
         pos_item_index = torch.from_numpy(pos_item_index).cuda()
-        # 把所有占位的元素的分数设置为一个很小的得分
-        # pos_item_mask[pos_item_mask == 0] = -100
-        # pos_item_mask = torch.from_numpy(pos_item_mask).cuda()
+        pos_item_mask = torch.from_numpy(pos_item_mask).cuda()
         max_len = pos_item_index.size(1)
         batch_size = pos_item_index.size(0)
-        users_emb = all_users[users]
-        users_emb = users_emb.view(batch_size, 1, self.latent_dim)
-        users_emb = users_emb.expand(batch_size, max_len, self.latent_dim)
-        pos_emb = all_items[pos_item_index.long()]
-        # 计算每个用户和自己pos item 之间的得分
-        pos_scores = torch.mul(users_emb, pos_emb)
-        pos_scores = torch.sum(pos_scores, dim=2)
-        # 遮挡其余的占位数据
-        pos_scores[pos_item_mask == 0] = -100
-        # 针对评分结果进行排序
-        sorted_pos_cores = torch.sort(pos_scores, dim=1, descending=True)
-        #
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
-        # 采样所有用户的评分较低的pos item用于替换
+        # 获取用户的所有pos item的特征信息
+        # batch_size  * max_len * dim
+        pos_emb = all_items[pos_item_index.long()].detach()
+        # 获取所有用的特信息
+        users_emb = all_users[users].detach()
+        users_expand_emb = users_emb.view(batch_size, 1, self.latent_dim)
+        users_expand_emb = users_expand_emb.expand(batch_size, max_len, self.latent_dim)
+        user_pos_item_feature = torch.cat([users_expand_emb, pos_emb], dim=-1)
+        user_pos_item_feature = user_pos_item_feature.reshape(-1, 2 * self.latent_dim)
+        # 计算用户和item之间的attention vector
+        user_item_scores = self.select_layer(user_pos_item_feature)
+        user_item_scores = user_item_scores.reshape(batch_size, max_len)
+        # 给mask的数据设置一个较小的得分， 使得补充的数据在attention中尽量接近于0
+        user_item_scores = user_item_scores.masked_fill(mask=(pos_item_mask == 0), value=-1e9)
+        # 通过softmax针对每个用户下的item进行归一化操作
+        attention_vector = F.softmax(user_item_scores, dim=-1)
+
+        # 针对获取到的attention进行排序
+        sorted_pos_cores = torch.sort(attention_vector, dim=1, descending=True)
+
+        # 根据概率挑选item去替换
         need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
             self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
-        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity
+        # 根据attention vector 针对每个用户下的item进行加和
+        pos_emb = pos_emb * attention_vector.reshape(batch_size, max_len, 1)
+        user_items_feature = pos_emb.sum(dim=1)
+        user_items_transform_feature = self.feature_transform(user_items_feature)
+        # 计算两个特征的loss
+        feature_loss = self.feature_loss(user_items_transform_feature, users_emb)
+
+        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss
+
 
     def replace_pos_items(self, users, pos_items, neg_items, need_replace, replaceable_items):
         numpy_users = users.detach().cpu().numpy()
@@ -170,7 +194,7 @@ class PureMF(BasicModel):
         # 得分最低的样本需要被替换
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
+        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
         # 替换所有要替换的节点
         users, keep_pos_items, neg, need_replace_pos_item, replaceable_mask = \
@@ -189,7 +213,7 @@ class PureMF(BasicModel):
         reg_loss = (1 / 2) * (users_emb.norm(2).pow(2) +
                               pos_emb.norm(2).pow(2) +
                               neg_emb.norm(2).pow(2)) / float(len(users))
-        return loss, reg_loss, similarity_loss, similarity
+        return loss, reg_loss, similarity_loss, feature_loss, similarity
 
     def forward(self, users, items):
         users = users.long()
