@@ -200,7 +200,7 @@ def output_generative_data(dataset, recommend_model, weight_file):
     # 循环获取每个用户要替换的数据和被替换的数据信息
     output_file_name = '../output/{}-replace{}-similarity{}-{}.txt'\
         .format(world.dataset, world.config['replace_ratio'],
-                world.config['similarity_ratio'], 'attention-similarity-l1')
+                world.config['similarity_ratio'], world.output_file)
     total_similarity = 0.
     with open(output_file_name, 'w+') as f:
         for user_id in users:
@@ -210,7 +210,7 @@ def output_generative_data(dataset, recommend_model, weight_file):
             train_pos = torch.tensor([pos_item_index])
             mask = np.array([np.ones(len(pos_item_index))])
             unique_user = [user_id]
-            need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
+            need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss = \
                 recommend_model.computer_pos_score(unique_user, user_pos_items, mask, train_pos)
             original_items = need_replace[:, 1]
             total_similarity += similarity

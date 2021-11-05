@@ -62,6 +62,7 @@ if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
 is_train = True
+output_file = 'attention-similarity-l1'
 TRAIN_epochs = args.epochs
 LOAD = args.load
 PATH = args.path
