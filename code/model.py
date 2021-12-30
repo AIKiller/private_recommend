@@ -52,12 +52,12 @@ class PureMF(BasicModel):
         super(PureMF, self).__init__()
         self.num_users = dataset.n_users
         self.num_items = dataset.m_items
+        self.user_privacy_ration = dataset.userPrivacySetting
         self.latent_dim = config['latent_dim_rec']
         self.replace_ratio = config['replace_ratio']
-        self.similarity_ratio = config['similarity_ratio']
         self.sample_num = config['sample_num']
         # 初始化模型信息
-        self.regularSimilar = RegularSimilar(self.similarity_ratio, self.latent_dim)
+        self.regularSimilar = RegularSimilar(self.latent_dim)
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
             nn.Linear(self.latent_dim, 1),
@@ -109,6 +109,7 @@ class PureMF(BasicModel):
         # 获取对应的特征
         users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]
+        privacy_settings = self.user_privacy_ration[users_index]
         need_replace_feature = torch.cat([users_emb, items_emb], dim=1)
         # 删除冗余数据
         del pos_item_index
@@ -118,7 +119,7 @@ class PureMF(BasicModel):
 
         # 获取每个需要替换的item 对应的相似item
         replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
-            self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items)
+            self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items, privacy_settings)
 
         return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity
 
@@ -216,6 +217,7 @@ class PureMF(BasicModel):
         neg_emb = self.embedding_item(neg.long()).detach()
         pos_scores = torch.sum(users_emb * pos_emb, dim=1)
         neg_scores = torch.sum(users_emb * neg_emb, dim=1)
+
         CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
 
         return CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss

@@ -67,7 +67,7 @@ def BPR_train_original(dataset, recommend_model, loss_class, epoch, neg_k=1, w=N
     aver_similarity = total_similarity / total_batch
     time_info = timer.dict()
     timer.zero()
-    return f"loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}"
+    return aver_loss, time_info, aver_similarity
 
 
 def load_users_pos_items(dataset, batch_users):
@@ -199,9 +199,8 @@ def output_generative_data(dataset, recommend_model, weight_file):
     users = np.arange(0, dataset.n_users)
     world.is_train = False
     # 循环获取每个用户要替换的数据和被替换的数据信息
-    output_file_name = '../output/{}-replace{}-similarity{}-{}.txt'\
-        .format(world.dataset, world.config['replace_ratio'],
-                world.config['similarity_ratio'], world.output_prefix)
+    output_file_name = '../output/{}-replace{}-{}.txt'\
+        .format(world.dataset, world.config['replace_ratio'], world.output_prefix)
     total_similarity = 0.
     with open(output_file_name, 'w+') as f:
         for user_id in users:

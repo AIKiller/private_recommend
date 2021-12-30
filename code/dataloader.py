@@ -9,6 +9,7 @@ Every dataset's index has to start at 0
 """
 import os
 from os.path import join
+import json
 import sys
 import torch
 import numpy as np
@@ -232,6 +233,7 @@ class Loader(BasicDataset):
         self.m_item = 0
         train_file = path + '/train.txt'
         test_file = path + '/test.txt'
+        privacy_file = path + '/user_privacy.json'
         self.path = path
         trainUniqueUsers, trainItem, trainUser = [], [], []
         testUniqueUsers, testItem, testUser = [], [], []
@@ -271,6 +273,12 @@ class Loader(BasicDataset):
         self.testUniqueUsers = np.array(testUniqueUsers)
         self.testUser = np.array(testUser)
         self.testItem = np.array(testItem)
+
+        # 加载每个用户的
+        with open(privacy_file) as f:
+            user_privacy = json.load(f)
+            self.user_privacy_settings = torch.tensor(user_privacy, dtype=torch.float32).cuda()
+
         
         self.Graph = None
         print(f"{self.trainDataSize} interactions for training")
@@ -313,6 +321,10 @@ class Loader(BasicDataset):
     @property
     def disorderAllPos(self):
         return self._disorderAllPos
+
+    @property
+    def userPrivacySetting(self):
+        return self.user_privacy_settings
 
     def _split_A_hat(self,A):
         A_fold = []

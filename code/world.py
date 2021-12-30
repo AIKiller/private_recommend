@@ -30,7 +30,7 @@ if not os.path.exists(FILE_PATH):
 
 
 config = {}
-all_dataset = ['lastfm', 'gowalla', 'KS10', 'yelp2018', 'amazon-book']
+all_dataset = ['lastfm', 'gowalla', 'KS10', 'yelp2018', 'Clothing', 'CD-Vinyl', 'amazon-book']
 all_models  = ['mf', 'lgn']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
@@ -45,7 +45,6 @@ config['lr'] = args.lr
 config['decay'] = args.decay
 config['pretrain'] = args.pretrain
 config['replace_ratio'] = args.replace_ratio
-config['similarity_ratio'] = args.similarity_ratio
 config['sample_num'] = args.sample_num
 config['A_split'] = False
 config['bigdata'] = False
@@ -55,7 +54,7 @@ device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
 is_train = True
-output_prefix = 'CF1+CF2-l1-90'
+output_prefix = 'similarity0.9_gowalla-lr1e-3-decay1e-4'
 dataset = args.dataset
 model_name = args.model
 if dataset not in all_dataset:
@@ -64,8 +63,6 @@ if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
 
-
-is_train=True
 TRAIN_epochs = args.epochs
 LOAD = args.load
 PATH = args.path

@@ -45,7 +45,7 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = CF1_loss + reg_loss + CF2_loss + 90 * similarity_loss + std_loss
+        loss = CF2_loss + 70 * similarity_loss + std_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
@@ -166,10 +166,10 @@ def set_seed(seed):
 def getFileName():
     if world.model_name == 'mf':
         file = f"{world.output_prefix}-mf-{world.dataset}-{world.config['latent_dim_rec']}" \
-               f"-{world.config['replace_ratio']}-{world.config['similarity_ratio']}.pth.tar"
+               f"-{world.config['replace_ratio']}.pth.tar"
     elif world.model_name == 'lgn':
         file = f"lgn-{world.dataset}-{world.config['lightGCN_n_layers']}-{world.config['latent_dim_rec']}" \
-               f"-{world.config['replace_ratio']}-{world.config['similarity_ratio']}.pth.tar"
+               f"-{world.config['replace_ratio']}.pth.tar"
     return os.path.join(world.FILE_PATH, file)
 
 def minibatch(*tensors, **kwargs):
