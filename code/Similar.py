@@ -21,11 +21,13 @@ class Similar(nn.Module):
 # 针对计算结果进行正规划
 class RegularSimilar(Similar):
 
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim, sample_items):
         super(RegularSimilar, self).__init__()
         self.latent_dim = latent_dim
         # 计算相相似度
         self.cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
+        # 用户的采样item列表
+        self.user_sample_items = sample_items
         # 设置损失计算
         self.similarity_loss = SimilarityMarginLoss()
         # torch.nn.L1Loss()
@@ -48,27 +50,29 @@ class RegularSimilar(Similar):
         item_ids = need_replace[:, 1]
         # 原始的item特征
         items_emb = all_items[item_ids]
+        # 采样的item列表
+        sample_items_emb = all_items[self.user_sample_items]
         # 基于用户和item的联合特征 生成一个新的特征Z
         union_feature = torch.cat([union_feature, privacy_settings.view(-1, 1)], dim=-1)
         user_item_feature = self.user_item_feature(union_feature)
         # 计算新特征和所有采样item的得分
-        replace_score = torch.mm(user_item_feature, all_items.T)
+        replace_score = torch.mm(user_item_feature, sample_items_emb.T)
         # 采用得分最高的那个元素用于替换
         if world.is_train:
             replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
 
-            item_sequence = torch.arange(0, all_items.shape[0]).view(1, -1).cuda()
-            replaceable_items = (replace_probability * item_sequence).sum(dim=-1).long()
+            replaceable_items = (replace_probability * self.user_sample_items).sum(dim=-1).long()
             # 获得新的item的特征信息
-            replaceable_items_feature = torch.mm(replace_probability, all_items)
+            replaceable_items_feature = torch.mm(replace_probability, sample_items_emb)
 
             # 原始的item 和 选择出来的item 做相似度loss计算
             similarity_loss, similarity \
                 = self.calculate_similar_loss(items_emb, replaceable_items_feature, privacy_settings)
 
         else:
-            replaceable_items = torch.argmax(replace_score, dim=1)
-            replaceable_items_feature = all_items[replaceable_items]
+            sample_item_index = torch.argmax(replace_score, dim=1)
+            replaceable_items_feature = sample_items_emb[sample_item_index]
+            replaceable_items = self.user_sample_items[sample_item_index]
             similarity_loss = 0.
             similarity = 0.
 
