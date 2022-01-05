@@ -54,7 +54,7 @@ device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
 is_train = True
-output_prefix = 'similarity0.9_gowalla-lr1e-3-decay1e-4'
+output_prefix = 'similarity0.1_gowalla-selected_sample-500'
 dataset = args.dataset
 model_name = args.model
 if dataset not in all_dataset:
