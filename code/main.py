@@ -30,9 +30,9 @@ if world.LOAD:
         pretrained_dict = {k: v for k, v in pretrain_dict.items() if k in original_model_dict}
         original_model_dict.update(pretrained_dict)
         Recmodel.load_state_dict(original_model_dict)
-        world.cprint(f"loaded model weights from {weight_file}")
+        world.cprint(f"loaded model weights from {pretrain_file_path}")
     except FileNotFoundError:
-        print(f"{weight_file} not exists, start from beginning")
+        print(f"{pretrain_file_path} not exists, start from beginning")
 Neg_k = 1
 
 # init tensorboard
