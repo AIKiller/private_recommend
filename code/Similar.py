@@ -44,6 +44,17 @@ class RegularSimilar(Similar):
 
         return similarity_loss, similarity.mean()
 
+    # 用来生成原始item的遮挡mask
+    def generate_original_item_mask(self, replace_scores, item_ids):
+        mask = torch.ones(size=replace_scores.shape)
+        item_ids = torch.tensor(item_ids).cuda()
+        # 获取最长的一个proposal的长度
+        item_matrix = torch.arange(0, replace_scores.shape[1]).long().cuda()
+        mask_expand = item_matrix.unsqueeze(0).expand(replace_scores.shape[0], replace_scores.shape[1])
+        item_expand = item_ids.unsqueeze(1).expand_as(mask_expand)
+        mask = (item_expand != mask_expand).int()
+        return mask
+
     def choose_replaceable_item(self, need_replace, union_feature, all_items, privacy_settings):
         item_ids = need_replace[:, 1]
         # 原始的item特征
@@ -53,6 +64,9 @@ class RegularSimilar(Similar):
         user_item_feature = self.user_item_feature(union_feature)
         # 计算新特征和所有采样item的得分
         replace_score = torch.mm(user_item_feature, all_items.T)
+        mask = self.generate_original_item_mask(replace_score, item_ids)
+        # 遮挡住原先的item得分
+        replace_score = replace_score * mask
         # 采用得分最高的那个元素用于替换
         if world.is_train:
             replace_probability = F.gumbel_softmax(replace_score, tau=1e-4, hard=True)
