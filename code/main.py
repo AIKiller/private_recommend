@@ -23,16 +23,16 @@ print(f"load and save to {weight_file}")
 # 加载预训练模型
 if world.LOAD:
     try:
-        pretrain_file_path = './checkpoints/mf-gowalla-64.pth.tar'
+        pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
         pretrain_dict = torch.load(pretrain_file_path, map_location=torch.device('cpu'))
         original_model_dict = Recmodel.state_dict()
         # 截取两个模型名称相同的层
         pretrained_dict = {k: v for k, v in pretrain_dict.items() if k in original_model_dict}
         original_model_dict.update(pretrained_dict)
         Recmodel.load_state_dict(original_model_dict)
-        world.cprint(f"loaded model weights from {pretrain_file_path}")
+        world.cprint(f"loaded model weights from {weight_file}")
     except FileNotFoundError:
-        print(f"{pretrain_file_path} not exists, start from beginning")
+        print(f"{weight_file} not exists, start from beginning")
 Neg_k = 1
 
 # init tensorboard
@@ -49,9 +49,10 @@ count = 1
 try:
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
-        # if epoch % 10 == 0:
-        #     cprint("[TEST]")
-            # result = Procedure.Test(dataset, Recmodel, epoch, w, world.config['multicore'])
+        if epoch % 10 == 0:
+            cprint("[TEST]")
+            result = Procedure.Test(dataset, Recmodel, epoch, w, world.config['multicore'])
+            print(result)
             # if best_recall < result['recall'][0]:
             #     best_recall = result['recall'][0]
             #     best_precision = result['precision'][0]
@@ -67,7 +68,6 @@ try:
             #     ))
             #     cprint("[Train END]")
             #     break
-            # print(result)
         aver_loss, time_info, aver_similarity = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
         print(f"EPOCH[{epoch+1}/{world.TRAIN_epochs}] loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}")
         if epoch % 10 == 0 and epoch > 1:

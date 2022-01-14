@@ -56,29 +56,8 @@ class PureMF(BasicModel):
         self.latent_dim = config['latent_dim_rec']
         self.replace_ratio = config['replace_ratio']
         self.sample_num = config['sample_num']
-        # # 针对item进行固定抽样
-        # item_indexes = np.arange(0, self.num_items)
-        # sample_items = np.random.choice(item_indexes, self.sample_num, replace=False)
-        # sample_items = torch.from_numpy(sample_items).cuda()
-
-        # 针对每个用户抽样相同数目得item
-        item_indexes = np.arange(0, self.num_items)
-        user_sample_items = []
-        for index in range(self.num_users):
-            visited_items = dataset.getUserPosItems([index])
-            # 获得一个未访问得item列表
-            unvisited_items = np.setdiff1d(item_indexes, visited_items)
-            sample_items = np.random.choice(unvisited_items, self.sample_num, replace=False)
-            user_sample_items.append(sample_items)
-
-        user_sample_items = torch.from_numpy(np.array(user_sample_items, dtype=np.int64)).cuda()
-
-        print(f"item sample is already to finish")
-
-
         # 初始化模型信息
-        self.regularSimilar = RegularSimilar(self.latent_dim, user_sample_items)
-
+        self.regularSimilar = RegularSimilar(self.latent_dim)
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
             nn.Linear(self.latent_dim, 1),
@@ -238,7 +217,7 @@ class PureMF(BasicModel):
         neg_emb = self.embedding_item(neg.long()).detach()
         pos_scores = torch.sum(users_emb * pos_emb, dim=1)
         neg_scores = torch.sum(users_emb * neg_emb, dim=1)
-        
+
         CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
 
         return CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss
