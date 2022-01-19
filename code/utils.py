@@ -45,7 +45,7 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = CF2_loss + 70 * similarity_loss + std_loss
+        loss = CF2_loss + 50 * similarity_loss + std_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)

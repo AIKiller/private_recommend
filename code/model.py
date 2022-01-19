@@ -57,7 +57,7 @@ class PureMF(BasicModel):
         self.replace_ratio = config['replace_ratio']
         self.sample_num = config['sample_num']
         # 初始化模型信息
-        self.regularSimilar = RegularSimilar(self.latent_dim)
+        self.regularSimilar = RegularSimilar(self.latent_dim, dataset.userSimMax, dataset.userSimMin)
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
             nn.Linear(self.latent_dim, 1),

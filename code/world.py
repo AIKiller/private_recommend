@@ -30,7 +30,7 @@ if not os.path.exists(FILE_PATH):
 
 
 config = {}
-all_dataset = ['lastfm', 'gowalla', 'KS10', 'yelp2018', 'Clothing', 'CD-Vinyl', 'amazon-book']
+all_dataset = ['Office', 'lastfm', 'gowalla', 'KS10', 'yelp2018', 'Clothing', 'CD-Vinyl', 'amazon-book']
 all_models  = ['mf', 'lgn']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
@@ -54,7 +54,7 @@ device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
 is_train = True
-output_prefix = 'similarity0.95_Clothing_max_min'
+output_prefix = 'similarity0.9_Office_similarity-50-relatively_CF2-5'
 dataset = args.dataset
 model_name = args.model
 if dataset not in all_dataset:

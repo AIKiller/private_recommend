@@ -227,6 +227,8 @@ class Loader(BasicDataset):
         cprint(f'loading [{path}]')
         self.split = config['A_split']
         self.folds = config['A_n_fold']
+        self.item_user_sim_max = []
+        self.item_user_sim_min = []
         self.mode_dict = {'train': 0, "test": 1}
         self.mode = self.mode_dict['train']
         self.n_user = 0
@@ -325,6 +327,13 @@ class Loader(BasicDataset):
     @property
     def userPrivacySetting(self):
         return self.user_privacy_settings
+
+    @property
+    def userSimMax(self):
+        return self.item_user_sim_max
+    @property
+    def userSimMin(self):
+        return self.item_user_sim_min
 
     def _split_A_hat(self,A):
         A_fold = []
@@ -427,3 +436,6 @@ class Loader(BasicDataset):
     #     for user in users:
     #         negItems.append(self.allNeg[user])
     #     return negItems
+    @userSimMax.setter
+    def userSimMax(self, value):
+        self._userSimMax = value
