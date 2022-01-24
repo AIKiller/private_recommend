@@ -37,6 +37,7 @@ class BPRLoss:
         self.model = recmodel
         self.weight_decay = config['decay']
         self.lr = config['lr']
+        self.coefficient = config['coefficient']
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
@@ -45,7 +46,7 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = CF2_loss + 50 * similarity_loss + std_loss
+        loss = self.coefficient[0] * CF2_loss + self.coefficient[1] * similarity_loss + std_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)

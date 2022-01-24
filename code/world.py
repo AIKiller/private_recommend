@@ -46,6 +46,7 @@ config['decay'] = args.decay
 config['pretrain'] = args.pretrain
 config['replace_ratio'] = args.replace_ratio
 config['sample_num'] = args.sample_num
+config['coefficient'] = eval(args.coefficient)
 config['A_split'] = False
 config['bigdata'] = False
 
@@ -54,13 +55,15 @@ device = torch.device('cuda' if GPU else "cpu")
 CORES = multiprocessing.cpu_count() // 2
 seed = args.seed
 is_train = True
-output_prefix = 'similarity0.9_Office_similarity-50-relatively_CF2-5'
+
 dataset = args.dataset
 model_name = args.model
 if dataset not in all_dataset:
     raise NotImplementedError(f"Haven't supported {dataset} yet!, try {all_dataset}")
 if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
+
+output_prefix = 'similarity0.7_Office_final_version'
 
 
 TRAIN_epochs = args.epochs

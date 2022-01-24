@@ -99,8 +99,12 @@ class PureMF(BasicModel):
             pos_item_index, self.replace_ratio,
             train_pos
         )
-
         need_replace = np.array(need_replace)
+
+        if need_replace.shape[0] == 0:
+            # item个数太少 不进行替换
+            return need_replace, torch.tensor([]).cuda(), torch.tensor([]).cuda(), 0., 0.
+
 
         # 获取所有的用户和item id的集合
         users_index = need_replace[:, 0]

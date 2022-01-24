@@ -47,4 +47,6 @@ def parse_args():
                         help='set the ratio of needing to replace private item')
     parser.add_argument('--sample_num', type=int, default=100,
                         help='the number of sample from unvisited items')
+    parser.add_argument('--coefficient', nargs='?', default="[1, 45]",
+                        help='the number of sample from unvisited items')
     return parser.parse_args()

@@ -23,6 +23,7 @@ print(f"load and save to {weight_file}")
 # 加载预训练模型
 if world.LOAD:
     try:
+        # pretrain_file_path = './checkpoints/mf-gowalla-64.pth.tar'
         pretrain_file_path = './checkpoints/mf-Office-64.pth.tar'
         # pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
         # pretrain_file_path = '/disk/lf/light-gcn/code/checkpoints/similarity0.99_Clothing_max_min-mf-Clothing-64-0.4.pth.tar'
@@ -66,7 +67,7 @@ try:
         #         torch.save(Recmodel.state_dict(), weight_file)
         #     else:
         #         count += 1
-        #     if count > 10:
+        #     if count > 30:
         #         # 训练数据的recall没有提升 出发early stop 策略
         #         print('best precision:{0:.4f}\t best recall:{1:.4f}\t best ndcg:{2:.4f}'.format(
         #             best_precision, best_recall, best_ndcg

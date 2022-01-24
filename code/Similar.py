@@ -52,14 +52,14 @@ class RegularSimilar(Similar):
         # 计算选择出来的替换item和所有item的相似度
         total_similarity_score = torch.mm(replaceable_items_feature, all_items.T)
 
-        replaceable_items_norm = torch.sqrt(
-            torch.sum(replaceable_items_feature * replaceable_items_feature, dim=-1)).view(-1, 1)
+        # replaceable_items_norm = torch.sqrt(
+        #     torch.sum(replaceable_items_feature * replaceable_items_feature, dim=-1)).view(-1, 1)
+        #
+        # all_items_norm = torch.sqrt(torch.sum(all_items * all_items, dim=-1)).view(1, -1)
+        #
+        # sim_norm = torch.mm(replaceable_items_norm, all_items_norm)
 
-        all_items_norm = torch.sqrt(torch.sum(all_items * all_items, dim=-1)).view(1, -1)
-
-        sim_norm = torch.mm(replaceable_items_norm, all_items_norm)
-
-        total_similarity_score = total_similarity_score / sim_norm
+        # total_similarity_score = total_similarity_score / sim_norm
 
         # 把item本身去掉
         # total_similarity_score = total_similarity_score * mask
