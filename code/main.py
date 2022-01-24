@@ -24,8 +24,8 @@ print(f"load and save to {weight_file}")
 if world.LOAD:
     try:
         # pretrain_file_path = './checkpoints/mf-gowalla-64.pth.tar'
-        pretrain_file_path = './checkpoints/mf-Office-64.pth.tar'
-        # pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
+        # pretrain_file_path = './checkpoints/mf-Office-64.pth.tar'
+        pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
         # pretrain_file_path = '/disk/lf/light-gcn/code/checkpoints/similarity0.99_Clothing_max_min-mf-Clothing-64-0.4.pth.tar'
         pretrain_dict = torch.load(pretrain_file_path, map_location=torch.device('cpu'))
         original_model_dict = Recmodel.state_dict()
@@ -46,7 +46,8 @@ if world.tensorboard:
 else:
     w = None
     world.cprint("not enable tensorflowboard")
-
+# Procedure.output_generative_data(dataset, Recmodel, weight_file)
+# exit()
 best_recall = 0.
 best_precision = 0.
 best_ndcg = 0.

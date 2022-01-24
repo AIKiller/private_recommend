@@ -21,17 +21,13 @@ class Similar(nn.Module):
 # 针对计算结果进行正规划
 class RegularSimilar(Similar):
 
-    def __init__(self, latent_dim, userSimMax, userSimMin):
+    def __init__(self, latent_dim):
         super(RegularSimilar, self).__init__()
         self.latent_dim = latent_dim
         # 计算相相似度
         self.cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
         # 设置损失计算
         self.similarity_loss = SimilarityMarginLoss()
-
-        self.user_sim_max = userSimMax
-        self.user_sim_min = userSimMin
-
         # torch.nn.L1Loss()
         # 设置线性变换
         self.user_item_feature = nn.Linear((2 * self.latent_dim) + 1, self.latent_dim)
@@ -123,10 +119,5 @@ class RegularSimilar(Similar):
     def regularize_similarity(self, total_similarity_score, item_similarity):
         score_min = torch.min(total_similarity_score, dim=-1).values
         score_max = torch.max(total_similarity_score, dim=-1).values
-        # 记录最大值和最小值
-        self.user_sim_max.append(score_max.mean())
-        self.user_sim_min.append(score_min.mean())
-
-        # print(score_max.mean())
 
         return (item_similarity - score_min) / (score_max - score_min)
