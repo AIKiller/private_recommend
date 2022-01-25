@@ -81,7 +81,7 @@ class RegularSimilar(Similar):
         original_mask, cover_msk = self.generate_original_item_mask(replace_score, item_ids)
         # 把原始的item得分进行遮挡
         # # 遮挡住原先的item得分
-        # replace_score = replace_score * cover_msk
+        replace_score = replace_score * cover_msk
         # 采用得分最高的那个元素用于替换
         if world.is_train:
             # 从联合feature和原始item之间选择一个得分最高的item出来
@@ -116,7 +116,6 @@ class RegularSimilar(Similar):
             replaceable_items_feature = all_items[replaceable_items]
             similarity_loss = 0.
             similarity = self.cos(replaceable_items_feature, items_emb).mean()
-            # print('相似度为：', similarity)
 
         return replaceable_items, replaceable_items_feature, similarity_loss, similarity
 
