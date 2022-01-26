@@ -42,11 +42,11 @@ class BPRLoss:
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
         # start_time = time()
-        CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss = self.model.bpr_loss(
+        CF1_loss, CF1_reg_loss, CF2_loss, std_loss = self.model.bpr_loss(
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = self.coefficient[0] * CF2_loss + self.coefficient[1] * similarity_loss + std_loss
+        loss = self.coefficient[0] * CF2_loss + std_loss
         # print('std_loss', similarity_loss, similarity)
         # end_time = time()
         # print('计算时间', end_time - start_time)
@@ -65,7 +65,17 @@ class BPRLoss:
         #         print("{} is not need gradient".format(name))
         # exit()
 
-        return loss.cpu().item(), similarity
+        return loss.cpu().item(), 0.
+
+
+# @nb.jit(nopython=False)
+def get_random_sample_item(user_ids, all_item_ids, all_pos_list):
+    replaceable_items = np.zeros(shape=user_ids.shape)
+    for iter_id, user_id in enumerate(user_ids):
+        # 在用户不相交的item中进行采样
+        sample_node = random.sample(all_item_ids.difference(all_pos_list[user_id]), 1)[0]
+        replaceable_items[iter_id] = sample_node
+    return replaceable_items
 
 
 @nb.jit(nopython=True)

@@ -53,11 +53,12 @@ class PureMF(BasicModel):
         self.num_users = dataset.n_users
         self.num_items = dataset.m_items
         self.user_privacy_ration = dataset.userPrivacySetting
+        all_pos_list = np.array(dataset.allPos, dtype=object)
         self.latent_dim = config['latent_dim_rec']
         self.replace_ratio = config['replace_ratio']
         self.sample_num = config['sample_num']
         # 初始化模型信息
-        self.regularSimilar = RegularSimilar(self.latent_dim, dataset.userSimMax, dataset.userSimMin)
+        self.regularSimilar = RegularSimilar(self.latent_dim, all_pos_list)
         self.select_layer = nn.Sequential(
             nn.Linear(2 * self.latent_dim, self.latent_dim),
             nn.Linear(self.latent_dim, 1),
@@ -103,7 +104,7 @@ class PureMF(BasicModel):
 
         if need_replace.shape[0] == 0:
             # item个数太少 不进行替换
-            return need_replace, torch.tensor([]).cuda(), torch.tensor([]).cuda(), 0., 0.
+            return need_replace, torch.tensor([]).cuda(), torch.tensor([]).cuda()
 
 
         # 获取所有的用户和item id的集合
@@ -113,8 +114,7 @@ class PureMF(BasicModel):
         # 获取对应的特征
         users_emb = all_users[users_index].detach()
         items_emb = all_items[items_index]
-        privacy_settings = self.user_privacy_ration[users_index]
-        need_replace_feature = torch.cat([users_emb, items_emb], dim=1)
+
         # 删除冗余数据
         del pos_item_index
         del users_emb
@@ -122,10 +122,10 @@ class PureMF(BasicModel):
         del all_users
 
         # 获取每个需要替换的item 对应的相似item
-        replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
-            self.regularSimilar.choose_replaceable_item(need_replace, need_replace_feature, all_items, privacy_settings)
+        replaceable_items, replaceable_items_feature = \
+            self.regularSimilar.choose_replaceable_item(need_replace, all_items)
 
-        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity
+        return need_replace, replaceable_items, replaceable_items_feature
 
     # 计算每个正样本和用户的得分
     def computer_pos_score(self, users, pos_item_index, pos_item_mask, train_pos):
@@ -159,7 +159,7 @@ class PureMF(BasicModel):
         sorted_pos_cores = torch.sort(attention_vector, dim=1, descending=True)
 
         # 根据概率挑选item去替换
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity = \
+        need_replace, replaceable_items, replaceable_items_feature = \
             self.sample_low_score_pos_item(users, sorted_pos_cores, pos_item_index, all_users, all_items, train_pos)
 
         # 根据attention vector 针对每个用户下的item进行加和
@@ -173,7 +173,7 @@ class PureMF(BasicModel):
         del user_items_feature
         del user_items_transform_feature
 
-        return need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, feature_loss
+        return need_replace, replaceable_items, replaceable_items_feature, feature_loss
 
     def replace_pos_items(self, users, pos, neg, need_replace, replaceable_items):
         numpy_users = users.detach().cpu().numpy()
@@ -210,7 +210,7 @@ class PureMF(BasicModel):
         # 在所有的节点里面挑选相似度在阈值范围的节点
         # start_time = time()
         CF1_loss, CF1_reg_loss = self.get_original_bpr_loss(users, pos, neg)
-        need_replace, replaceable_items, replaceable_items_feature, similarity_loss, similarity, std_loss = \
+        need_replace, replaceable_items, replaceable_items_feature, std_loss = \
             self.computer_pos_score(unique_user, pos_item_index, pos_item_mask, pos)
         # 替换所有要替换的节点
         users, neg, replaceable_mask \
@@ -224,7 +224,7 @@ class PureMF(BasicModel):
 
         CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
 
-        return CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss
+        return CF1_loss, CF1_reg_loss, CF2_loss, std_loss
 
 
     def forward(self, users, items):

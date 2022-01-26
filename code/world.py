@@ -63,7 +63,7 @@ if dataset not in all_dataset:
 if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
-output_prefix = 'similarity0.9_Office_sim_60'
+output_prefix = '_Clothing_random_replace'
 
 
 TRAIN_epochs = args.epochs
