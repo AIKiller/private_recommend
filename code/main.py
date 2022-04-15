@@ -74,8 +74,10 @@ try:
         #         ))
         #         cprint("[Train END]")
         #         break
-        aver_loss, time_info, aver_similarity = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
-        print(f"EPOCH[{epoch+1}/{world.TRAIN_epochs}] loss{aver_loss:.3f}-{time_info}-similarity{aver_similarity:.3f}")
+        aver_loss, time_info, bpr_loss, similarity_loss, std_loss, aver_similarity = Procedure.BPR_train_original(dataset, Recmodel, bpr, epoch, neg_k=Neg_k,w=w)
+        print(f"EPOCH[{epoch+1}/{world.TRAIN_epochs}] loss{aver_loss:.3f}-bpr{bpr_loss:.3f}"
+              f"-similarity_loss:{similarity_loss:.3f}-std{std_loss:.3f}"
+              f"-{time_info}-similarity{aver_similarity:.3f}")
         # userSimMax = torch.stack(dataset.userSimMax)
         # userSimMin = torch.stack(dataset.userSimMin)
         # print(torch.sum(userSimMin)/ userSimMin.shape[0], torch.sum(userSimMax) / userSimMax.shape[0])
@@ -87,7 +89,7 @@ try:
                 count = 1
             else:
                 count += 1
-            if count > 30:
+            if count > 40:
                 cprint("[Train END]")
                 break
 

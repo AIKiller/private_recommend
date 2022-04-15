@@ -47,7 +47,7 @@ class BPRLoss:
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
         loss = self.coefficient[0] * CF2_loss + self.coefficient[1] * similarity_loss + std_loss
-        # print('std_loss', similarity_loss, similarity)
+        # print(CF2_loss, similarity_loss, std_loss)
         # end_time = time()
         # print('计算时间', end_time - start_time)
 
@@ -65,7 +65,7 @@ class BPRLoss:
         #         print("{} is not need gradient".format(name))
         # exit()
 
-        return loss.cpu().item(), similarity
+        return loss.cpu().item(), CF2_loss.cpu().item(), std_loss.cpu().item(), similarity_loss.cpu().item(), similarity
 
 
 @nb.jit(nopython=True)

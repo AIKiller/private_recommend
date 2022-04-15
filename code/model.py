@@ -221,9 +221,7 @@ class PureMF(BasicModel):
         neg_emb = self.embedding_item(neg.long()).detach()
         pos_scores = torch.sum(users_emb * pos_emb, dim=1)
         neg_scores = torch.sum(users_emb * neg_emb, dim=1)
-
-        CF2_loss = torch.mean(nn.functional.softplus(neg_scores - pos_scores))
-
+        CF2_loss = torch.mean(nn.functional.softplus(- pos_scores))
         return CF1_loss, CF1_reg_loss, CF2_loss, similarity_loss, similarity, std_loss
 
 

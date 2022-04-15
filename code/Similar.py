@@ -102,7 +102,6 @@ class RegularSimilar(Similar):
 
             del total_similarity_score
             # 计算每个向量的相似度和相似度阈值的loss
-            # todo:是不是均方差更有效果
             similarity_loss = self.similarity_loss(item_similarity, privacy_settings)
             # 平均相似度值
             similarity = item_similarity.mean()
