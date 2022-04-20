@@ -82,17 +82,17 @@ try:
         # userSimMin = torch.stack(dataset.userSimMin)
         # print(torch.sum(userSimMin)/ userSimMin.shape[0], torch.sum(userSimMax) / userSimMax.shape[0])
 
-        # if epoch % 10 == 0 and epoch > 1:
-        if best_loss > aver_loss:
-            best_loss = aver_loss
-            torch.save(Recmodel.state_dict(), weight_file)
-            count = 1
-            # print(best_loss)
-        else:
-            count += 1
-        if count > 20:
-            cprint("[Train END]")
-            break
+        if epoch % 10 == 0 and epoch > 1:
+            if best_loss > aver_loss:
+                best_loss = aver_loss
+                torch.save(Recmodel.state_dict(), weight_file)
+                count = 1
+                # print(best_loss)
+            else:
+                count += 1
+            if count > 3:
+                cprint("[Train END]")
+                break
 
 finally:
     if world.tensorboard:

@@ -64,7 +64,7 @@ if model_name not in all_models:
     raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
 # output_prefix = 'similarity0.9-lr1e-4-max_loss'
-output_prefix = 'similarity0.7-max_loss_' + str(args.coefficient)
+output_prefix = 'similarity0.9-sample_' + str(args.coefficient)
 
 
 TRAIN_epochs = args.epochs
