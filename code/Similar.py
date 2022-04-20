@@ -50,8 +50,15 @@ class RegularSimilar(Similar):
     def get_replaceable_item_similarity(self, replaceable_items_feature, all_items, replace_probability):
         # 下面计算新选择的item和原始item的相似度
         # 计算选择出来的替换item和所有item的相似度
-        total_similarity_score = torch.mm(replaceable_items_feature, all_items.T)
-
+        chunk_number = 20
+        total_similarity_score = torch.Tensor([]).cuda()
+        offset_number = all_items.shape[0] / chunk_number
+        # print(all_items.shape)
+        for i in range(chunk_number):
+            start = int(np.floor(i * offset_number))
+            end = int(np.floor((i+1) * offset_number))
+            scores = torch.mm(replaceable_items_feature, all_items[start:end].T)
+            total_similarity_score = torch.cat([total_similarity_score, scores], dim=-1)
         # replaceable_items_norm = torch.sqrt(
         #     torch.sum(replaceable_items_feature * replaceable_items_feature, dim=-1)).view(-1, 1)
         #
@@ -122,8 +129,8 @@ class RegularSimilar(Similar):
         score_min = torch.min(total_similarity_score, dim=-1).values
         score_max = torch.max(total_similarity_score, dim=-1).values
         # 记录最大值和最小值
-        self.user_sim_max.append(score_max.mean())
-        self.user_sim_min.append(score_min.mean())
+        # self.user_sim_max.append(score_max.mean())
+        # self.user_sim_min.append(score_min.mean())
 
         # print(score_max.mean())
 

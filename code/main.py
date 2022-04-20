@@ -24,8 +24,8 @@ print(f"load and save to {weight_file}")
 if world.LOAD:
     try:
         # pretrain_file_path = './checkpoints/mf-gowalla-64.pth.tar'
-        pretrain_file_path = './checkpoints/mf-Office-64.pth.tar'
-        # pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
+        # pretrain_file_path = './checkpoints/mf-Office-64.pth.tar'
+        pretrain_file_path = './checkpoints/mf-Clothing-64.pth.tar'
         # pretrain_file_path = '/disk/lf/light-gcn/code/checkpoints/similarity0.99_Clothing_max_min-mf-Clothing-64-0.4.pth.tar'
         pretrain_dict = torch.load(pretrain_file_path, map_location=torch.device('cpu'))
         original_model_dict = Recmodel.state_dict()
@@ -55,10 +55,10 @@ count = 1
 try:
     for epoch in range(world.TRAIN_epochs):
         start = time.time()
-        # if epoch % 10 == 0:
-        #     cprint("[TEST]")
-        #     result = Procedure.Test(dataset, Recmodel, epoch, w, world.config['multicore'])
-        #     print(result)
+        if epoch % 10 == 0:
+            cprint("[TEST]")
+            result = Procedure.Test(dataset, Recmodel, epoch, w, world.config['multicore'])
+            print(result)
         #     if best_recall < result['recall'][0]:
         #         best_recall = result['recall'][0]
         #         best_precision = result['precision'][0]
@@ -82,16 +82,17 @@ try:
         # userSimMin = torch.stack(dataset.userSimMin)
         # print(torch.sum(userSimMin)/ userSimMin.shape[0], torch.sum(userSimMax) / userSimMax.shape[0])
 
-        if epoch % 10 == 0 and epoch > 1:
-            if best_loss > aver_loss:
-                best_loss = aver_loss
-                torch.save(Recmodel.state_dict(), weight_file)
-                count = 1
-            else:
-                count += 1
-            if count > 40:
-                cprint("[Train END]")
-                break
+        # if epoch % 10 == 0 and epoch > 1:
+        if best_loss > aver_loss:
+            best_loss = aver_loss
+            torch.save(Recmodel.state_dict(), weight_file)
+            count = 1
+            # print(best_loss)
+        else:
+            count += 1
+        if count > 20:
+            cprint("[Train END]")
+            break
 
 finally:
     if world.tensorboard:
