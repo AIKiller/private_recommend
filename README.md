@@ -1,108 +1,101 @@
 
-#### Update
-
-2020-09:
-* Change the print format of each epoch
-* Add Cpp Extension in  `code/sources/`  for negative sampling. To use the extension, please install `pybind11` and `cppimport` under your environment
-
----
-
-## LightGCN-pytorch
-
-This is the Pytorch implementation for our SIGIR 2020 paper:
-
->SIGIR 2020. Xiangnan He, Kuan Deng ,Xiang Wang, Yan Li, Yongdong Zhang, Meng Wang(2020). LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation, [Paper in arXiv](https://arxiv.org/abs/2002.02126).
-
-Author: Prof. Xiangnan He (staff.ustc.edu.cn/~hexn/)
-
-(Also see Tensorflow [implementation](https://github.com/kuandeng/LightGCN))
+## UPC-SDG
 
 ## Introduction
+*todo*
 
-In this work, we aim to simplify the design of GCN to make it more concise and appropriate for recommendation. We propose a new model named LightGCN,including only the most essential component in GCN—neighborhood aggregation—for collaborative filtering
-
-
+### Table of contents
+1. [Requirement](#enviroment-requirement)
+2. [Dataset](#Dataset)
+3. [Usage](#usage)
+   - [Set user privacy settings](#Set-user-privacy-settings)
+   - [Run UPC-SDG Model](#run-UPC-SDG-model)
+   - [Evaluate model effectiveness](#evaluate-model-effectiveness)
+4. [Genereated train data]()
+5. [Results](#Results)
 
 ## Enviroment Requirement
 
-`pip install -r requirements.txt`
-
-
+1. Install via pip: `pip install -r requirements.txt`
+2. Create the empty folders, `output` and `data`.
+3. Download the train data from the [Amazon Review Data](http://jmcauley.ucsd.edu/data/amazon/links.html) 
+and [SNAP](https://snap.stanford.edu/data/loc-gowalla.html) Page, details setting see [Dataset](#dataset) section 
+4. Prepare for pre-trained User/Item embedding weight from [Google Ddrive](https://drive.google.com/drive/folders/14bI4GXyK2VZIROn3BGSHljrFWdqud3WU?usp=sharing) and put them in `./code/checkpoints`
 
 ## Dataset
 
-We provide three processed datasets: Gowalla, Yelp2018 and Amazon-book and one small dataset LastFM.
+We provide three processed datasets: Office, Clothing and Gowalla.
 
-see more in `dataloader.py`
 
-## An example to run a 3-layer LightGCN
+|#Interactions|#Users|#Items|#interactions|sparsity|
+|:-|:-|:-|:-|:-|
+|Office|4,874|2,405|52,957| 99.55%|
+|Clothing|18,209| 17,317| 150,889| 99.95%|
+|Gowalla| 29,858| 40,981| 1,027,370| 99.91%|
 
-run LightGCN on **Gowalla** dataset:
 
-* change base directory
 
-Change `ROOT_PATH` in `code/world.py`
+-`train.txt` Train file. Each line is a user with her/his positive interactions with items: (userID and itemID)
+-`test.txt`Test file. Each line is a user with her/his several positive interactions with items: (userID and itemID)
+-`user_privacy.json` User's privacy setting. Each element is user's sensitivity of privacy guarantee for original items.
 
-* command
 
-` cd code && python main.py --decay=1e-4 --lr=0.001 --layer=3 --seed=2020 --dataset="gowalla" --topks="[20]" --recdim=64`
+**Note:**
+IF you need to add other dataset, please consider below steps:
+1. Add additional dataset data into `data` folder, includes `train.txt` and `test.txt`
+2. Add new dataset name in `./code/world.py` and `./code/register.py`
+3. Extend `dataloader.py` file If you need
 
-* log output
+## Set user privacy settings
 
-```shell
-...
-======================
-EPOCH[5/1000]
-BPR[sample time][16.2=15.84+0.42]
-[saved][[BPR[aver loss1.128e-01]]
-[0;30;43m[TEST][0m
-{'precision': array([0.03315359]), 'recall': array([0.10711388]), 'ndcg': array([0.08940792])}
-[TOTAL TIME] 35.9975962638855
-...
-======================
-EPOCH[116/1000]
-BPR[sample time][16.9=16.60+0.45]
-[saved][[BPR[aver loss2.056e-02]]
-[TOTAL TIME] 30.99874997138977
-...
+the code is used to generate `user_privacy.json` file into dataset folder, which imitating user's personalize privacy demand.
+
+```bash 
+python process_data.py --data_path="Office" --privacy_ration=0.7
 ```
 
-*NOTE*:
+*Note*:
+- `data_path`: the path for the train data folder, which include `train.txt/text.txt` files.
+- `privacy_ration`: is defined as privacy sensitivity for the original item, limit is (0,1), (e.g. for validating, we used 0.1, 0.3, 0.5, 0.7, 0.9 respectively in our paper).
 
-1. Even though we offer the code to split user-item matrix for matrix multiplication, we strongly suggest you don't enable it since it will extremely slow down the training speed.
-2. If you feel the test process is slow, try to increase the ` testbatch` and enable `multicore`(Windows system may encounter problems with `multicore` option enabled)
-3. Use `tensorboard` option, it's good.
-4. Since we fix the seed(`--seed=2020` ) of `numpy` and `torch` in the beginning, if you run the command as we do above, you should have the exact output log despite the running time (check your output of *epoch 5* and *epoch 116*).
+## Run UPC-SDG Model
+
+Run UPC-SDG model to generate new train data considering user privacy sensitivity, 
+and different dataset parameters are shown below:
 
 
-## Extend:
-* If you want to run lightGCN on your own dataset, you should go to `dataloader.py`, and implement a dataloader inherited from `BasicDataset`.  Then register it in `register.py`.
-* If you want to run your own models on the datasets we offer, you should go to `model.py`, and implement a model inherited from `BasicModel`.  Then register it in `register.py`.
-* If you want to run your own sampling methods on the datasets and models we offer, you should go to `Procedure.py`, and implement a function. Then modify the corresponding code in `main.py`
+Run model on **Office** dataset:
+
+```bash 
+ python -u ./code/main.py --decay=1e-1 --lr=0.01 --seed=2022 --dataset="Office" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
+```
+
+run model on **Clothing** dataset:
+
+```bash 
+python -u ./code/main.py --decay=1e-1 --lr=0.001 --seed=2022 --dataset="Clothing" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
+```
+
+run model on **Gowalla** dataset:
+
+```bash 
+python -u ./code/main.py --decay=1e-1 --lr=0.01 --seed=2022 --dataset="gowalla" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
+```
+
+
+## Evaluate model effectiveness
+
+When the training process of UPC-SDG model is finished, the model will output the new train data into `output` folder, name format is `{dataset name}-replace{replace ratio}-{output prefix}.txt`, then the new train file and original test file as privacy guarantee dataset input into other recommendation system 
+to evaluate (e.g. BPRMF, NeuMF and LightGCN ).
+
+*You can find the generated train data used to evaluate in the `output` folder, or generate a new file according to needed*
+
+## Genereated train data
+
+For convenient, we provided the genereated train data used in our paper. you can get them from [Google Ddrive](https://drive.google.com/drive/folders/1Z6-Ux4Cot_LLCeHuG2Blme7y-59O4P-m?usp=sharing) and put them into other recommendation system to evaluate.
 
 
 ## Results
 *all metrics is under top-20*
 
-***pytorch* version results** (stop at 1000 epochs):
-
-(*for seed=2020*)
-
-* gowalla:
-
-|             | Recall | ndcg | precision |
-| ----------- | ---------------------------- | ----------------- | ---- |
-| **layer=1** | 0.1687               | 0.1417    | 0.05106 |
-| **layer=2** | 0.1786                     | 0.1524    | 0.05456 |
-| **layer=3** | 0.1824                | 0.1547 | 0.05589 |
-| **layer=4** | 0.1825                 | 0.1537       | 0.05576 |
-
-* yelp2018
-
-|             | Recall | ndcg | precision |
-| ----------- | ---------------------------- | ----------------- | ---- |
-| **layer=1** | 0.05604     | 0.04557 | 0.02519 |
-| **layer=2** | 0.05988               | 0.04956 | 0.0271 |
-| **layer=3** | 0.06347          | 0.05238 | 0.0285 |
-| **layer=4** | 0.06515                | 0.05325 | 0.02917 |
-
+![results](https://s1.ax1x.com/2022/06/10/X6BxyT.png)

@@ -12,7 +12,6 @@ import numpy as np
 from torch import log
 from dataloader import BasicDataset
 from time import time
-from model import LightGCN
 from model import PairWiseModel
 from sklearn.metrics import roc_auc_score
 import random
@@ -37,7 +36,8 @@ class BPRLoss:
         self.model = recmodel
         self.weight_decay = config['decay']
         self.lr = config['lr']
-        self.coefficient = config['coefficient']
+        self.bpr_loss_d = config['bpr_loss_d']
+        self.similarity_loss_d = config['similarity_loss_d']
         self.opt = optim.Adam(recmodel.parameters(), lr=self.lr)
 
     def stageOne(self, users, pos, neg, unique_user, pos_item_index, pos_item_mask):
@@ -46,24 +46,11 @@ class BPRLoss:
             users, pos, neg, unique_user, pos_item_index, pos_item_mask)
         reg_loss = CF1_reg_loss*self.weight_decay
         # print(loss, reg_loss, similarity_loss)
-        loss = self.coefficient[0] * CF2_loss + std_loss
-        # print(CF2_loss, similarity_loss, std_loss)
-        # end_time = time()
-        # print('计算时间', end_time - start_time)
+        loss = self.bpr_loss_d * CF2_loss + self.similarity_loss_d * similarity_loss + std_loss
 
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
-
-        # for name, param in self.model.named_parameters():
-        #     if param.requires_grad:
-        #         if param.grad is not None:
-        #             print("{} has gradient: {} ".format(name, param.grad.mean()))
-        #         else:
-        #             print("{} has not gradient".format(name))
-        #     else:
-        #         print("{} is not need gradient".format(name))
-        # exit()
 
         return loss.cpu().item(), CF2_loss.cpu().item(), std_loss.cpu().item(), similarity_loss.cpu().item(), similarity
 
@@ -165,12 +152,8 @@ def set_seed(seed):
     torch.manual_seed(seed)
 
 def getFileName():
-    if world.model_name == 'mf':
-        file = f"{world.output_prefix}-mf-{world.dataset}-{world.config['latent_dim_rec']}" \
-               f"-{world.config['replace_ratio']}.pth.tar"
-    elif world.model_name == 'lgn':
-        file = f"lgn-{world.dataset}-{world.config['lightGCN_n_layers']}-{world.config['latent_dim_rec']}" \
-               f"-{world.config['replace_ratio']}.pth.tar"
+    file = f"{world.dataset}-mf-{world.output_prefix}-" \
+           f"{world.config['privacy_ratio']}-{world.config['replace_ratio']}.pth.tar"
     return os.path.join(world.FILE_PATH, file)
 
 def minibatch(*tensors, **kwargs):

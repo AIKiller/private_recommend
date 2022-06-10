@@ -80,67 +80,50 @@ class RegularSimilar(Similar):
         # 原始的item特征
         items_emb = all_items[item_ids]
         # 基于用户和item的联合特征 生成一个新的特征Z
-        # union_feature = torch.cat([union_feature, privacy_settings.view(-1, 1)], dim=-1)
-        # user_item_feature = self.user_item_feature(union_feature)
+        union_feature = torch.cat([union_feature, privacy_settings.view(-1, 1)], dim=-1)
+        user_item_feature = self.user_item_feature(union_feature)
         # 计算新特征和所有采样item的得分
-        # replace_score = torch.mm(user_item_feature, all_items.T)
-        # # 根据相关性结果进行排序
-        #
-        # sorted_replace_score = torch.sort(replace_score, dim=-1, descending=False)
-        #
-        # item_number = replace_score.shape[1]
-        #
-        # item_index = torch.floor(item_number * torch.max(privacy_settings)).long()
+        replace_score = torch.mm(user_item_feature, all_items.T)
+        # 获得原始item的位置mask
+        original_mask, cover_msk = self.generate_original_item_mask(replace_score, item_ids)
+        # 把原始的item得分进行遮挡
+        # # 遮挡住原先的item得分
+        replace_score = replace_score * cover_msk
+        # 采用得分最高的那个元素用于替换
+        if world.is_train:
+            # 从联合feature和原始item之间选择一个得分最高的item出来
+            # 并且这个item的协同过滤结果不会变差
+            replace_probability = F.gumbel_softmax(replace_score, hard=True, dim=-1)
+            # replace_probability = F.softmax(replace_score, dim=-1)
 
-        replaceable_items = np.random.randint(0, all_items.shape[0], need_replace.shape[0])
-        replaceable_items = torch.tensor(replaceable_items).cuda()
-        # print(replaceable_items, replaceable_items.shape)
-        # exit()
-        replaceable_items_feature = all_items[replaceable_items]
+            item_sequence = torch.arange(0, all_items.shape[0]).view(1, -1).cuda()
+            # 获得新item的编号
+            replaceable_items = (replace_probability * item_sequence).sum(dim=-1).long()
+            # 获得新的item的特征信息
+            replaceable_items_feature = torch.mm(replace_probability, all_items)
 
-        # print(item_index, replacable_item_id, replacable_item_id.shape)
-        # exit()
-        # # 获得原始item的位置mask
-        # original_mask, cover_msk = self.generate_original_item_mask(replace_score, item_ids)
-        # # 把原始的item得分进行遮挡
-        # # # 遮挡住原先的item得分
-        # replace_score = replace_score * cover_msk
-        # # 采用得分最高的那个元素用于替换
-        # if world.is_train:
-        #     # 从联合feature和原始item之间选择一个得分最高的item出来
-        #     # 并且这个item的协同过滤结果不会变差
-        #     replace_probability = F.gumbel_softmax(replace_score, hard=True, dim=-1)
-        #     # replace_probability = F.softmax(replace_score, dim=-1)
-        #
-        #     item_sequence = torch.arange(0, all_items.shape[0]).view(1, -1).cuda()
-        #     # 获得新item的编号
-        #     replaceable_items = (replace_probability * item_sequence).sum(dim=-1).long()
-        #     # 获得新的item的特征信息
-        #     replaceable_items_feature = torch.mm(replace_probability, all_items)
-        #
-        #     total_similarity_score, item_similarity = \
-        #         self.get_replaceable_item_similarity(replaceable_items_feature, all_items, original_mask)
-        #     # 进行一个归一化
-        #     item_similarity = self.regularize_similarity(total_similarity_score, item_similarity)
-        #
-        #     del total_similarity_score
-        #     # 计算每个向量的相似度和相似度阈值的loss
-        #     similarity_loss = self.similarity_loss(item_similarity, privacy_settings)
-        #     # 平均相似度值
-        #     similarity = item_similarity.mean()
-        #     # 计算一下绝对相似度多少
-        #     # replaceable_similarity = self.cos(replaceable_items_feature, items_emb)
-        #
-        #     # print(similarity, replaceable_similarity.mean())
-        #
-        # else:
-        #     replaceable_items = torch.argmax(replace_score, dim=1)
-        #     replaceable_items_feature = all_items[replaceable_items]
-        #     similarity_loss = 0.
+            total_similarity_score, item_similarity = \
+                self.get_replaceable_item_similarity(replaceable_items_feature, all_items, original_mask)
+            # 进行一个归一化
+            item_similarity = self.regularize_similarity(total_similarity_score, item_similarity)
 
-        similarity = self.cos(replaceable_items_feature, items_emb).mean()
+            del total_similarity_score
+            # 计算每个向量的相似度和相似度阈值的loss
+            similarity_loss = self.similarity_loss(item_similarity, privacy_settings)
+            # 平均相似度值
+            similarity = item_similarity.mean()
+            # 计算一下绝对相似度多少
+            # replaceable_similarity = self.cos(replaceable_items_feature, items_emb)
 
-        return replaceable_items, replaceable_items_feature, torch.Tensor([0]).cuda(), similarity
+            # print(similarity, replaceable_similarity.mean())
+
+        else:
+            replaceable_items = torch.argmax(replace_score, dim=1)
+            replaceable_items_feature = all_items[replaceable_items]
+            similarity_loss = 0.
+            similarity = self.cos(replaceable_items_feature, items_emb).mean()
+
+        return replaceable_items, replaceable_items_feature, similarity_loss, similarity
 
     def regularize_similarity(self, total_similarity_score, item_similarity):
         score_min = torch.min(total_similarity_score, dim=-1).values

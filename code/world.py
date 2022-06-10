@@ -16,11 +16,13 @@ import multiprocessing
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 args = parse_args()
 
-ROOT_PATH = "/disk/lf/light-gcn"
+ROOT_PATH = args.path
 CODE_PATH = join(ROOT_PATH, 'code')
 DATA_PATH = join(ROOT_PATH, 'data')
 BOARD_PATH = join(CODE_PATH, 'runs')
-FILE_PATH = join(CODE_PATH, 'checkpoints')
+FILE_PATH = join(CODE_PATH, 'emebdding')
+
+
 import sys
 sys.path.append(join(CODE_PATH, 'sources'))
 
@@ -35,7 +37,6 @@ all_models  = ['mf', 'lgn']
 # config['batch_size'] = 4096
 config['bpr_batch_size'] = args.bpr_batch
 config['latent_dim_rec'] = args.recdim
-config['lightGCN_n_layers'] = args.layer
 config['dropout'] = args.dropout
 config['keep_prob'] = args.keepprob
 config['A_n_fold'] = args.a_fold
@@ -43,10 +44,10 @@ config['test_u_batch_size'] = args.testbatch
 config['multicore'] = args.multicore
 config['lr'] = args.lr
 config['decay'] = args.decay
-config['pretrain'] = args.pretrain
 config['replace_ratio'] = args.replace_ratio
-config['sample_num'] = args.sample_num
-config['coefficient'] = eval(args.coefficient)
+config['privacy_ratio'] = args.privacy_ratio
+config['bpr_loss_d'] = args.bpr_loss_d
+config['similarity_loss_d'] = args.similarity_loss_d
 config['A_split'] = False
 config['bigdata'] = False
 
@@ -57,14 +58,12 @@ seed = args.seed
 is_train = True
 
 dataset = args.dataset
-model_name = args.model
 if dataset not in all_dataset:
     raise NotImplementedError(f"Haven't supported {dataset} yet!, try {all_dataset}")
-if model_name not in all_models:
-    raise NotImplementedError(f"Haven't supported {model_name} yet!, try {all_models}")
 
 # output_prefix = 'similarity0.9-lr1e-4-max_loss'
-output_prefix = 'similarity0.9-sample_' + str(args.coefficient)
+output_prefix = 'max_loss-bpr_d_{}-similarity_d_{}-emb_size_{}-lr_{}'\
+        .format(args.bpr_loss_d, args.similarity_loss_d,args.recdim, args.lr)
 
 
 TRAIN_epochs = args.epochs
@@ -72,7 +71,6 @@ LOAD = args.load
 PATH = args.path
 topks = eval(args.topks)
 tensorboard = args.tensorboard
-comment = args.comment
 # let pandas shut up
 from warnings import simplefilter
 simplefilter(action="ignore", category=FutureWarning)
