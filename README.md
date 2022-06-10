@@ -20,7 +20,7 @@
 2. Create the empty folders, `output` and `data`.
 3. Download the train data from the [Amazon Review Data](http://jmcauley.ucsd.edu/data/amazon/links.html) 
 and [SNAP](https://snap.stanford.edu/data/loc-gowalla.html) Page, details setting see [Dataset](#dataset) section 
-4. Prepare for pre-trained User/Item embedding weight from [Google Ddrive](https://drive.google.com/drive/folders/14bI4GXyK2VZIROn3BGSHljrFWdqud3WU?usp=sharing) and put them in `./code/checkpoints`
+4. Prepare for pre-trained User/Item embedding weight from [Google Ddrive](https://drive.google.com/drive/folders/14bI4GXyK2VZIROn3BGSHljrFWdqud3WU?usp=sharing) and put them in `./code/emebdding`
 
 ## Dataset
 
