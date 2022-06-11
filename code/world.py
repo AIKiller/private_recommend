@@ -45,9 +45,10 @@ config['multicore'] = args.multicore
 config['lr'] = args.lr
 config['decay'] = args.decay
 config['replace_ratio'] = args.replace_ratio
-config['privacy_ratio'] = args.privacy_ratio
 config['bpr_loss_d'] = args.bpr_loss_d
 config['similarity_loss_d'] = args.similarity_loss_d
+config['privacy_ratio'] = args.privacy_ratio
+config['privacy_settings_json'] = args.privacy_settings_json
 config['A_split'] = False
 config['bigdata'] = False
 

@@ -15,8 +15,10 @@ from time import time
 from model import PairWiseModel
 from sklearn.metrics import roc_auc_score
 import random
+import json
 import numba as nb
 import os
+
 try:
     from cppimport import imp_from_filepath
     from os.path import join, dirname
@@ -95,6 +97,51 @@ def construct_need_replace_user_item(users, sorted_pos_score, sorted_pos_index,
                 need_replace.append([user_index, item_id])
     return need_replace
 
+
+def generate_user_privacy_settings(dataset_name, privacy_ration, replace_ration=0, replace_value=0):
+    # 读取训练数据
+    user_idxes = []
+    training_data_path = os.path.join('./data/', dataset_name)
+    with open(os.path.join(training_data_path, 'train.txt')) as f:
+        for l in f.readlines():
+            if len(l) > 0:
+                l = l.strip('\n').split(' ')
+                items = [int(i) for i in l[1:]]
+                uid = int(l[0])
+                user_idxes.append(uid)
+
+    max_user_id = max(user_idxes)
+    user_ids = np.array([i for i in range(0, max_user_id + 1)], dtype=np.int64)
+
+    user_idxes = torch.tensor(user_idxes, dtype=torch.int64)
+    user_id_sequence = torch.from_numpy(user_ids)
+
+    index_mask = torch.zeros_like(user_id_sequence).bool()
+    need_different_index = torch.zeros_like(user_id_sequence)
+    user_privacy_rationes = torch.zeros_like(user_id_sequence, dtype=torch.float64)
+    # 赋值
+    index_mask[user_idxes] = 1
+
+    np.random.shuffle(user_ids)
+
+    end_index = int(np.round(user_ids.shape[0] * replace_ration))
+    need_different_index[user_ids[:end_index]] = 1
+    need_different_index = need_different_index.bool()
+    user_privacy_rationes = torch.masked_fill(user_privacy_rationes, index_mask, privacy_ration)
+    user_privacy_rationes = torch.masked_fill(user_privacy_rationes, need_different_index, replace_value)
+
+    user_privacy_rationes = user_privacy_rationes.numpy().tolist()
+
+    # print(user_privacy_rationes)
+
+    with open(os.path.join(training_data_path, 'user_privacy.json'), "w+") as out:
+        json.dump(user_privacy_rationes, out)
+    print('user_privacy dict output is successful, similarity:{0}, random replace:{1}, replace:{2}'.format(
+        privacy_ration, replace_ration, replace_value
+    ))
+    return os.path.join(training_data_path, 'user_privacy.json')
+
+
 def UniformSample_original(dataset, neg_ratio = 1):
     dataset : BasicDataset
     allPos = dataset.allPos
@@ -153,7 +200,7 @@ def set_seed(seed):
 
 def getFileName():
     file = f"{world.dataset}-mf-{world.output_prefix}-" \
-           f"{world.config['privacy_ratio']}-{world.config['replace_ratio']}.pth.tar"
+           f"{world.config['replace_ratio']}-{world.config['privacy_ratio']}.pth.tar"
     return os.path.join(world.FILE_PATH, file)
 
 def minibatch(*tensors, **kwargs):

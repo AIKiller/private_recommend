@@ -25,7 +25,7 @@ print(f"load and save to {weight_file}")
 if world.LOAD:
     try:
         # pretrain_file_path = './emebdding/mf-gowalla-64.pth.tar'
-        pretrain_file_path = './code/emebdding/mf-Office-64.pth.tar'
+        pretrain_file_path = './code/embedding/mf-Office-64.pth.tar'
         # pretrain_file_path = './emebdding/mf-Clothing-64.pth.tar'
         pretrain_dict = torch.load(pretrain_file_path, map_location=torch.device('cpu'))
         original_model_dict = Recmodel.state_dict()

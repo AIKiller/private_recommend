@@ -4,14 +4,17 @@
 ## Introduction
 *todo*
 
+## Updates
+Update (June 11, 2022)
+This update will integrate the function of manually generating user privacy settings（`process_data.py`） into the model. Now you can specify the user's privacy sensitivity by setting the parameter `--privacy_ratio` or `--privacy_settings_json`
+
 ### Table of contents
 1. [Requirement](#enviroment-requirement)
 2. [Dataset](#Dataset)
-3. [Usage](#usage)
-   - [Set user privacy settings](#Set-user-privacy-settings)
-   - [Run UPC-SDG Model](#run-UPC-SDG-model)
-   - [Evaluate model effectiveness](#evaluate-model-effectiveness)
-4. [Genereated train data]()
+3. Usage
+   - [Run UPC-SDG Model](#Run-UPC-SDG-Model)
+   - [Evaluate model effectiveness](#Evaluate-model-effectiveness)
+4. [Genereated train data](#Genereated-train-data)
 5. [Results](#Results)
 
 ## Enviroment Requirement
@@ -20,7 +23,7 @@
 2. Create the empty folders, `output` and `data`.
 3. Download the train data from the [Amazon Review Data](http://jmcauley.ucsd.edu/data/amazon/links.html) 
 and [SNAP](https://snap.stanford.edu/data/loc-gowalla.html) Page, details setting see [Dataset](#dataset) section 
-4. Prepare for pre-trained User/Item embedding weight from [Google Ddrive](https://drive.google.com/drive/folders/14bI4GXyK2VZIROn3BGSHljrFWdqud3WU?usp=sharing) and put them in `./code/emebdding`
+4. Prepare for pre-trained User/Item embedding weight from [Google Ddrive](https://drive.google.com/drive/folders/14bI4GXyK2VZIROn3BGSHljrFWdqud3WU?usp=sharing) and put them in `./code/embedding`
 
 ## Dataset
 
@@ -46,18 +49,6 @@ IF you need to add other dataset, please consider below steps:
 2. Add new dataset name in `./code/world.py` and `./code/register.py`
 3. Extend `dataloader.py` file If you need
 
-## Set user privacy settings
-
-the code is used to generate `user_privacy.json` file into dataset folder, which imitating user's personalize privacy demand.
-
-```bash 
-python process_data.py --data_path="Office" --privacy_ration=0.7
-```
-
-*Note*:
-- `data_path`: the path for the train data folder, which include `train.txt/text.txt` files.
-- `privacy_ration`: is defined as privacy sensitivity for the original item, limit is (0,1), (e.g. for validating, we used 0.1, 0.3, 0.5, 0.7, 0.9 respectively in our paper).
-
 ## Run UPC-SDG Model
 
 Run UPC-SDG model to generate new train data considering user privacy sensitivity, 
@@ -67,7 +58,7 @@ and different dataset parameters are shown below:
 Run model on **Office** dataset:
 
 ```bash 
- python -u ./code/main.py --decay=1e-1 --lr=0.01 --seed=2022 --dataset="Office" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
+ python -u ./code/main.py --decay=1e-1 --lr=0.001 --seed=2022 --dataset="Office" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
 ```
 
 run model on **Clothing** dataset:
@@ -79,8 +70,24 @@ python -u ./code/main.py --decay=1e-1 --lr=0.001 --seed=2022 --dataset="Clothing
 run model on **Gowalla** dataset:
 
 ```bash 
-python -u ./code/main.py --decay=1e-1 --lr=0.01 --seed=2022 --dataset="gowalla" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
+python -u ./code/main.py --decay=1e-3 --lr=0.001 --seed=2022 --dataset="gowalla" --topks="[20]" --recdim=64 --bpr_batch=2048 --load=1 --replace_ratio=0.2 --privacy_ratio=0.1 --bpr_loss_d=1 --similarity_loss_d=3
 ```
+
+
+Extend:Set user privacy settings(Optional)
+
+If you need to load the special user's privacy settings, you can set path parameter  into run command. （e.g. `--privacy_settings_json='./data/privacy_example.json'`）
+
+Besides, we provide `process_data.py` to generate `user_privacy.json` file into dataset folder:
+
+```bash 
+python process_data.py --data_path="Office" --privacy_ration=0.7
+```
+
+*Note*:
+- `data_path`: the path for the train data folder, which include `train.txt/text.txt` files.
+- `privacy_ration`: is defined as privacy sensitivity for the original item, limit is (0,1), (e.g. for validating, we used 0.1, 0.3, 0.5, 0.7, 0.9 respectively in our paper).
+
 
 
 ## Evaluate model effectiveness

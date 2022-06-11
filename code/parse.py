@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('--testbatch', type=int,default=100,
                         help="the batch size of users for testing")
     parser.add_argument('--dataset', type=str,default='gowalla',
-                        help="available datasets: [lastfm, gowalla, yelp2018, amazon-book]")
+                        help="available datasets: [Office, Clothing, Gowalla]")
     parser.add_argument('--path', type=str,default="./save",
                         help="path to save weights")
     parser.add_argument('--topks', nargs='?',default="[20]",
@@ -39,10 +39,12 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=2020, help='random seed')
     parser.add_argument('--replace_ratio', type=float, default=0.2,
                         help='set the ratio of needing to replace private item')
-    parser.add_argument('--privacy_ratio', type=float, default=0.2,
+    parser.add_argument('--privacy_ratio', type=float,
                         help='set the ratio of user\'s privacy sensitivity')
-    parser.add_argument('--coefficient', nargs='?', default="[1, 3]",
-                        help='the number of sample from unvisited items')
+    parser.add_argument('--privacy_settings_json', type=str,
+                        help="the file name of user's privacy settings")
+    # parser.add_argument('--coefficient', nargs='?', default="[1, 3]",
+    #                     help='the number of sample from unvisited items')
     parser.add_argument('--bpr_loss_d', type=int, default=1,
                         help='the weight decay for bpr_loss')
     parser.add_argument('--similarity_loss_d', type=float, default=3,
